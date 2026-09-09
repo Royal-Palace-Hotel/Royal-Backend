@@ -1,0 +1,130 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Room {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  translationKey String
+  price          Float
+  currency       String   @default("EUR")
+  size           Int
+  maxGuests      Int
+  quantity       Int      @default(1)
+  amenities      String[]
+  images         String[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  bookings       Booking[]
+}
+
+model Booking {
+  id         String   @id @default(cuid())
+  guestName  String
+  guestEmail String
+  guestPhone String?
+  checkIn    DateTime
+  checkOut   DateTime
+  rooms      Int
+  adults     Int
+  children   Int      @default(0)
+  roomId     String
+  room       Room     @relation(fields: [roomId], references: [id])
+  status     String   @default("pending") // pending, confirmed, cancelled
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([checkIn, checkOut])
+  @@index([roomId])
+}
+
+model MenuSection {
+  id        String     @id @default(cuid())
+  title     String
+  titleEn   String
+  order     Int        @default(0)
+  items     MenuItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model MenuItem {
+  id             String      @id @default(cuid())
+  name           String
+  nameEn         String
+  description    String
+  descriptionEn  String
+  price          Float
+  order          Int         @default(0)
+  sectionId      String
+  section        MenuSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model SpaTreatment {
+  id           String   @id @default(cuid())
+  key          String   @unique
+  durationKey  String
+  price        Float
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model EventRoom {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  image     String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String
+  subject   String
+  message   String
+  createdAt DateTime @default(now())
+}
+
+model EventInquiry {
+  id         String   @id @default(cuid())
+  name       String
+  email      String
+  phone      String?
+  subject    String?
+  message    String
+  eventDate  DateTime
+  guestCount Int
+  createdAt DateTime @default(now())
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
+model AdminUser {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      String   @default("admin") // admin, staff
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
