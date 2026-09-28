@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express'
+import { randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import prisma from '../../utils/db'
+import pool from '../../config/db'
+import { AdminUserRow } from '../../types/database'
 import { AppError } from '../../middleware/errorHandler'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key'
@@ -11,9 +13,11 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     const { email, password } = req.body
 
     // Find user
-    const user = await prisma.adminUser.findUnique({
-      where: { email },
-    })
+    const [users] = await pool.execute<AdminUserRow[]>(
+      'SELECT id, email, password, role, created_at, updated_at FROM admin_users WHERE email = ? LIMIT 1',
+      [email],
+    )
+    const user = users[0]
 
     if (!user) {
       throw new AppError('Invalid credentials', 401)
@@ -59,11 +63,12 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     }
 
     // Check if user already exists
-    const existingUser = await prisma.adminUser.findUnique({
-      where: { email },
-    })
+    const [existingUsers] = await pool.execute<AdminUserRow[]>(
+      'SELECT id, email, password, role, created_at, updated_at FROM admin_users WHERE email = ? LIMIT 1',
+      [email],
+    )
 
-    if (existingUser) {
+    if (existingUsers.length > 0) {
       throw new AppError('User already exists', 409)
     }
 
@@ -71,13 +76,16 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     const hashedPassword = await bcrypt.hash(password, 10)
 
     // Create user
-    const user = await prisma.adminUser.create({
-      data: {
-        email,
-        password: hashedPassword,
-        role,
-      },
-    })
+    const id = randomUUID()
+    await pool.execute(
+      'INSERT INTO admin_users (id, email, password, role) VALUES (?, ?, ?, ?)',
+      [id, email, hashedPassword, role],
+    )
+    const [users] = await pool.execute<AdminUserRow[]>(
+      'SELECT id, email, password, role, created_at, updated_at FROM admin_users WHERE id = ? LIMIT 1',
+      [id],
+    )
+    const user = users[0]
 
     // Generate JWT token
     const token = jwt.sign(

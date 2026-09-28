@@ -1,27 +1,16 @@
 import { Request, Response, NextFunction } from 'express'
-import prisma from '../../utils/db'
-import { AppError } from '../../middleware/errorHandler'
+import { subscribe as subscribeToNewsletter } from './service'
 
 export async function subscribe(req: Request, res: Response, next: NextFunction) {
   try {
-    const { email } = req.body
+    const { subscriber, alreadySubscribed } = await subscribeToNewsletter(req.body.email)
 
-    // Check if already subscribed
-    const existing = await prisma.newsletterSubscriber.findUnique({
-      where: { email },
-    })
-
-    if (existing) {
+    if (alreadySubscribed) {
       return res.status(200).json({
         message: 'Already subscribed',
-        data: existing,
+        data: subscriber,
       })
     }
-
-    // Create subscription
-    const subscriber = await prisma.newsletterSubscriber.create({
-      data: { email },
-    })
 
     res.status(201).json({
       message: 'Successfully subscribed to newsletter',

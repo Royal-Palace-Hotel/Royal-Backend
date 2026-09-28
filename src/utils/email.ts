@@ -1,11 +1,15 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@royalpalaceantsirabe.com'
 const HOTEL_EMAIL = 'royalpalace.resa@moov.mg' // Hotel's email from frontend
 
 export async function sendBookingEmail(booking: any) {
   try {
+    if (!resend) {
+      console.warn('Booking email skipped: RESEND_API_KEY is not configured')
+      return
+    }
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: HOTEL_EMAIL,
@@ -38,6 +42,10 @@ export async function sendBookingEmail(booking: any) {
 
 export async function sendContactEmail(contact: any) {
   try {
+    if (!resend) {
+      console.warn('Contact email skipped: RESEND_API_KEY is not configured')
+      return
+    }
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: HOTEL_EMAIL,
@@ -66,6 +74,10 @@ export async function sendContactEmail(contact: any) {
 
 export async function sendEventInquiryEmail(inquiry: any) {
   try {
+    if (!resend) {
+      console.warn('Event inquiry email skipped: RESEND_API_KEY is not configured')
+      return
+    }
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: HOTEL_EMAIL,

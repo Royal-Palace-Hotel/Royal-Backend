@@ -22,10 +22,25 @@ export function errorHandler(err: Error, req: Request, res: Response, next: Next
     })
   }
 
-  // Prisma errors
-  if (err.constructor.name === 'PrismaClientKnownRequestError') {
+  const code = 'code' in err ? err.code : undefined
+
+  if (code === 'ER_DUP_ENTRY') {
+    return res.status(409).json({
+      error: 'A record with this value already exists',
+      ...(process.env.NODE_ENV === 'development' && { details: err.message }),
+    })
+  }
+
+  if (code === 'ER_NO_REFERENCED_ROW_2') {
+    return res.status(404).json({
+      error: 'Referenced record not found',
+      ...(process.env.NODE_ENV === 'development' && { details: err.message }),
+    })
+  }
+
+  if (code === 'ER_ROW_IS_REFERENCED_2') {
     return res.status(400).json({
-      error: 'Database operation failed',
+      error: 'Record is referenced by another record',
       ...(process.env.NODE_ENV === 'development' && { details: err.message }),
     })
   }

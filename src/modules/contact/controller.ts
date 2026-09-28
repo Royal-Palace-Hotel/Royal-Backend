@@ -1,20 +1,10 @@
 import { Request, Response, NextFunction } from 'express'
-import prisma from '../../utils/db'
+import { createContactMessage as insertContactMessage, createEventInquiry as insertEventInquiry } from './service'
 import { sendContactEmail, sendEventInquiryEmail } from '../../utils/email'
 
 export async function createContactMessage(req: Request, res: Response, next: NextFunction) {
   try {
-    const { name, email, phone, subject, message } = req.body
-
-    const contactMessage = await prisma.contactMessage.create({
-      data: {
-        name,
-        email,
-        phone,
-        subject,
-        message,
-      },
-    })
+    const contactMessage = await insertContactMessage(req.body)
 
     // Send email notification
     await sendContactEmail(contactMessage)
@@ -30,19 +20,7 @@ export async function createContactMessage(req: Request, res: Response, next: Ne
 
 export async function createEventInquiry(req: Request, res: Response, next: NextFunction) {
   try {
-    const { name, email, phone, subject, message, eventDate, guestCount } = req.body
-
-    const eventInquiry = await prisma.eventInquiry.create({
-      data: {
-        name,
-        email,
-        phone,
-        subject,
-        message,
-        eventDate: new Date(eventDate),
-        guestCount: parseInt(guestCount),
-      },
-    })
+    const eventInquiry = await insertEventInquiry(req.body)
 
     // Send email notification
     await sendEventInquiryEmail(eventInquiry)
