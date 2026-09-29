@@ -4,6 +4,10 @@ export interface RoomRow extends RowDataPacket {
   id: string
   slug: string
   translation_key: string
+  name: string | null
+  name_en: string | null
+  description: string | null
+  description_en: string | null
   price: number
   currency: string
   size: number
@@ -68,7 +72,15 @@ export interface SpaTreatmentRow extends RowDataPacket {
 export interface EventRoomRow extends RowDataPacket {
   id: string
   key: string
+  name: string | null
+  name_en: string | null
+  description: string | null
+  description_en: string | null
   image: string
+  capacity: number | null
+  schedule: string | null
+  price: number | null
+  currency: string | null
   sort_order: number
 }
 

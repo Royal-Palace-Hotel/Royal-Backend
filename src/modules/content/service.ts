@@ -12,7 +12,7 @@ import { mapEventRoom, mapMenuSection, mapRoom, mapSpaTreatment } from './mapper
 
 export async function getRooms() {
   const [rooms] = await pool.execute<RoomRow[]>(
-    'SELECT id, slug, translation_key, price, currency, size, max_guests, total_units FROM rooms ORDER BY price ASC',
+    'SELECT id, slug, translation_key, name, name_en, description, description_en, price, currency, size, max_guests, total_units FROM rooms ORDER BY price ASC',
   )
   if (rooms.length === 0) return []
 
@@ -73,7 +73,7 @@ export async function getSpaTreatments() {
 
 export async function getEventRooms() {
   const [rows] = await pool.execute<EventRoomRow[]>(
-    'SELECT id, `key`, image, sort_order FROM event_rooms ORDER BY sort_order ASC',
+    'SELECT id, `key`, name, name_en, description, description_en, image, capacity, schedule, price, currency, sort_order FROM event_rooms ORDER BY sort_order ASC',
   )
   return rows.map(mapEventRoom)
 }

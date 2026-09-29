@@ -11,11 +11,20 @@ import bookingRoutes from './modules/bookings/routes'
 import contactRoutes from './modules/contact/routes'
 import newsletterRoutes from './modules/newsletter/routes'
 import authRoutes from './modules/auth/routes'
+import adminRoutes from './modules/admin/routes'
 
 dotenv.config()
 
 const app = express()
 const PORT = process.env.PORT || 4000
+const defaultOrigins = ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3002']
+const configuredOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean)
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? configuredOrigins
+  : [...new Set([...defaultOrigins, ...configuredOrigins])]
 
 // Rate limiters
 const loginLimiter = rateLimit({
@@ -37,9 +46,7 @@ const generalLimiter = rateLimit({
 // Middleware
 app.use(helmet())
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? ['https://your-domain.com'] // Replace with production domain
-    : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3002'], // Vite dev servers
+  origin: allowedOrigins,
   credentials: true,
 }))
 app.use(express.json())
@@ -56,6 +63,7 @@ app.use('/api/bookings', generalLimiter, bookingRoutes)
 app.use('/api/contact', generalLimiter, contactRoutes)
 app.use('/api/newsletter', generalLimiter, newsletterRoutes)
 app.use('/api/auth', authRoutes)
+app.use('/api/admin', adminRoutes)
 
 // Error handling
 app.use(errorHandler)
