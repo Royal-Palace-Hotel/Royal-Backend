@@ -1,13 +1,13 @@
 # Royal Palace Antsirabe - Backend API
 
-Complete backend API for the Royal Palace Antsirabe hotel website, built with Node.js, TypeScript, Express, Prisma, and PostgreSQL (Neon).
+Complete backend API for the Royal Palace Antsirabe hotel website, built with Node.js, TypeScript, Express, mysql2, and MySQL 8.
 
 ## 🚀 Tech Stack
 
 - **Runtime**: Node.js + TypeScript
 - **Framework**: Express.js
-- **ORM**: Prisma v5
-- **Database**: PostgreSQL (hosted on Neon)
+- **Database driver**: mysql2/promise
+- **Database**: MySQL 8
 - **Validation**: Zod
 - **Authentication**: JWT (bcryptjs)
 - **Email**: Resend
@@ -16,7 +16,7 @@ Complete backend API for the Royal Palace Antsirabe hotel website, built with No
 ## 📋 Prerequisites
 
 - Node.js 18+ and npm
-- A Neon PostgreSQL account (free tier available)
+- MySQL 8, or Docker Compose
 - A Resend account for email notifications (free tier available)
 
 ## 🔧 Setup Instructions
@@ -35,11 +35,15 @@ Copy the example environment file and fill in your credentials:
 cp .env.example .env
 ```
 
-Edit `.env` with your actual values:
+Edit `.env` with your local MySQL connection and service credentials:
 
 ```env
-# Database (Neon PostgreSQL)
-DATABASE_URL="postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require"
+# Database (MySQL 8)
+DATABASE_URL="mysql://royal:royal@127.0.0.1:3306/royal_palace"
+MYSQL_ROOT_PASSWORD=root
+MYSQL_DATABASE=royal_palace
+MYSQL_USER=royal
+MYSQL_PASSWORD=royal
 
 # JWT Secret (generate a secure random string)
 JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
@@ -49,45 +53,29 @@ RESEND_API_KEY="re_xxxxxxxxxxxxx"
 FROM_EMAIL="noreply@royalpalaceantsirabe.com"
 
 # Server
-PORT=3001
+PORT=4000
 NODE_ENV=development
 ```
 
-#### Getting Your Neon Database URL
-
-1. Go to [Neon Console](https://console.neon.tech/)
-2. Create a new project or select existing one
-3. Copy the connection string from the dashboard
-4. It should look like: `postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require`
-
-#### Getting Your Resend API Key
-
-1. Go to [Resend Console](https://resend.com/api-keys)
-2. Create a new API key
-3. Copy the key (starts with `re_`)
-
-### 3. Initialize Database
-
-Generate Prisma client and push schema to database:
+### 3. Start MySQL and initialize the database
 
 ```bash
-npm run prisma:generate
-npx prisma db push
+docker compose up -d
 ```
 
-### 4. Seed Initial Data
-
-Populate the database with rooms, menu items, spa treatments, event rooms, and admin user:
+The Compose service initializes an empty database from `db/schema.sql`. For a MySQL server initialized without Docker, run:
 
 ```bash
-npm run prisma:seed
+npm run db:init
 ```
 
-**Default Admin Credentials:**
-- Email: `admin@royalpalaceantsirabe.com`
-- Password: `admin123`
+### 4. Seed Initial Content
 
-⚠️ **Important**: Change the default admin password after first login!
+```bash
+npm run db:seed
+```
+
+Create the first admin account interactively with `npm run create-admin`.
 
 ### 5. Start Development Server
 
@@ -95,7 +83,7 @@ npm run prisma:seed
 npm run dev
 ```
 
-The API will be available at `http://localhost:3001`
+The API will be available at `http://localhost:4000`
 
 ## 📡 API Endpoints
 
@@ -181,8 +169,13 @@ The API will be available at `http://localhost:3001`
 
 ```
 Royal-Backend/
+├── db/
+│   ├── schema.sql           # MySQL schema
+│   ├── seed.sql             # Idempotent content seed
+│   └── run-sql.ts           # Windows-friendly SQL runner
 ├── src/
-│   ├── index.ts              # Main server entry point
+│   ├── server.ts             # Main server entry point
+│   ├── config/db.ts          # mysql2 connection pool
 │   ├── middleware/           # Express middleware
 │   │   ├── errorHandler.ts   # Global error handling
 │   │   └── validate.ts       # Zod validation middleware
@@ -192,12 +185,9 @@ Royal-Backend/
 │   │   ├── contact/          # Contact & event inquiries
 │   │   ├── newsletter/       # Newsletter subscriptions
 │   │   └── auth/             # Authentication & authorization
-│   └── utils/
-│       ├── db.ts             # Prisma client
-│       └── email.ts          # Email service (Resend)
-├── prisma/
-│   ├── schema.prisma         # Database schema
-│   └── seed.ts               # Seed data script
+│   ├── types/database.ts     # SQL row interfaces
+│   └── utils/email.ts        # Email service (Resend)
+├── docker-compose.yml
 ├── .env.example              # Environment variables template
 ├── .gitignore
 ├── package.json
@@ -207,17 +197,14 @@ Royal-Backend/
 
 ## 🗄️ Database Schema
 
-The database includes the following models:
+The MySQL schema creates these tables:
 
-- **Room** - Hotel rooms with pricing, amenities, and images
-- **Booking** - Booking requests with guest info and date ranges
-- **MenuSection** & **MenuItem** - Restaurant menu (bilingual)
-- **SpaTreatment** - Spa treatments with pricing
-- **EventRoom** - Event/conference rooms
-- **ContactMessage** - Contact form submissions
-- **EventInquiry** - Event inquiry forms
-- **NewsletterSubscriber** - Newsletter subscriptions
-- **AdminUser** - Admin/staff users for backend access
+- `rooms`, `room_images`, and `room_amenities`
+- `bookings`
+- `menu_sections` and `menu_items`
+- `spa_treatments` and `event_rooms`
+- `contact_messages` (contact and event inquiry types)
+- `newsletter_subscribers` and `admin_users`
 
 ## 📧 Email Notifications
 
@@ -255,20 +242,20 @@ npm start
 
 Make sure to set these in your production environment:
 
-- `DATABASE_URL` - Your Neon connection string
+- `DATABASE_URL` - MySQL connection string (`mysql://user:password@host:3306/royal_palace`)
 - `JWT_SECRET` - A secure random string (use a different value than dev)
 - `RESEND_API_KEY` - Your Resend API key
 - `FROM_EMAIL` - Verified sender email in Resend
 - `NODE_ENV=production`
-- `PORT` - Port number (default: 3001)
+- `PORT` - Port number (default: 4000)
 
 ## 🐛 Troubleshooting
 
 ### Database Connection Issues
 
-- Ensure your `DATABASE_URL` is correct and includes `?sslmode=require`
-- Check that your Neon project is active
-- Verify your Neon connection limits (free tier has connection limits)
+- Ensure your `DATABASE_URL` uses the `mysql://` protocol and points to an active MySQL 8 server
+- Confirm the database and user in the connection URL exist and have access to the schema
+- For Docker, check the service with `docker compose ps` and review logs with `docker compose logs mysql`
 
 ### Email Not Sending
 
@@ -278,7 +265,7 @@ Make sure to set these in your production environment:
 
 ### CORS Errors
 
-- Update the CORS origin in `src/index.ts` to include your frontend domain
+- Update the CORS origin in `src/server.ts` to include your frontend domain
 - For local development, ensure Vite dev server is on port 5173 or 3000
 
 ## 📝 Development Notes
@@ -286,14 +273,14 @@ Make sure to set these in your production environment:
 - The API uses Zod for request validation
 - All endpoints return JSON responses
 - Errors include detailed messages in development mode
-- Database queries are logged in development mode
+- SQL statements use parameterized values
 
 ## 🤝 Connecting to Frontend
 
 The frontend should be configured with:
 
 ```env
-VITE_API_URL=http://localhost:3001/api
+VITE_API_URL=http://localhost:4000/api
 ```
 
 For production, update this to your backend API URL.

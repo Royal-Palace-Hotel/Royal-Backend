@@ -8,8 +8,8 @@ export function validate(schema: ZodSchema) {
       schema.parse(req.body)
       next()
     } catch (error) {
-      if (error instanceof ZodError && error.errors) {
-        const errors = error.errors.map(e => ({
+      if (error instanceof ZodError && error.issues) {
+        const errors = error.issues.map(e => ({
           field: e.path.join('.'),
           message: e.message,
         }))

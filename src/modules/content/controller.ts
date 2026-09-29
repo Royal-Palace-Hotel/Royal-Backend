@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
-import prisma from '../../utils/db'
+import { getEventRooms, getMenu, getRooms, getSpaTreatments } from './service'
 
 export function getContent(type: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -8,19 +8,16 @@ export function getContent(type: string) {
 
       switch (type) {
         case 'rooms':
-          data = await prisma.room.findMany({ orderBy: { price: 'asc' } })
+          data = await getRooms()
           break
         case 'menu':
-          data = await prisma.menuSection.findMany({
-            include: { items: { orderBy: { order: 'asc' } } },
-            orderBy: { order: 'asc' },
-          })
+          data = await getMenu()
           break
         case 'spa':
-          data = await prisma.spaTreatment.findMany({ orderBy: { order: 'asc' } })
+          data = await getSpaTreatments()
           break
         case 'events':
-          data = await prisma.eventRoom.findMany({ orderBy: { order: 'asc' } })
+          data = await getEventRooms()
           break
         case 'gallery':
           // Gallery will be static for now, or we can add a GalleryImage model later
