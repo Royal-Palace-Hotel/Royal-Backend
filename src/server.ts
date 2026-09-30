@@ -11,6 +11,7 @@ import bookingRoutes from './modules/bookings/routes'
 import contactRoutes from './modules/contact/routes'
 import newsletterRoutes from './modules/newsletter/routes'
 import authRoutes from './modules/auth/routes'
+import restaurantRoutes, { menuManagementRoutes } from './modules/restaurant/routes'
 
 dotenv.config()
 
@@ -52,6 +53,8 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/content', contentRoutes)
+app.use('/api/restaurant', restaurantRoutes)
+app.use('/api', menuManagementRoutes)
 app.use('/api/bookings', generalLimiter, bookingRoutes)
 app.use('/api/contact', generalLimiter, contactRoutes)
 app.use('/api/newsletter', generalLimiter, newsletterRoutes)
