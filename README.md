@@ -13,101 +13,32 @@ Complete backend API for the Royal Palace Antsirabe hotel website, built with No
 - **Email**: Resend
 - **Dev Tools**: nodemon, tsx
 
-## 📋 Prerequisites
+## Local development setup
 
-- Node.js 18+ and npm
-- MySQL 8, or Docker Compose
-- A Resend account for email notifications (free tier available)
+Prerequisites: Node.js 18+ and Docker with its engine running. `db:init` starts the Compose MySQL service automatically when no local MySQL server is reachable. It also works with a running MySQL server configured through `DATABASE_URL`. No `.env` copy or manual database setup is needed for the defaults.
 
-## 🔧 Setup Instructions
-
-### 1. Install Dependencies
+Run these commands from the repository root:
 
 ```bash
+cd Royal-Backend
 npm install
-```
-
-### 2. Configure Environment Variables
-
-Copy the example environment file and fill in your credentials:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your local MySQL connection and service credentials:
-
-```env
-# Database (MySQL 8)
-DATABASE_URL="mysql://royal:royal@127.0.0.1:3306/royal_palace"
-MYSQL_ROOT_PASSWORD=root
-MYSQL_DATABASE=royal_palace
-MYSQL_USER=royal
-MYSQL_PASSWORD=royal
-
-# JWT Secret (generate a secure random string)
-JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
-
-# Email (Resend)
-RESEND_API_KEY="re_xxxxxxxxxxxxx"
-FROM_EMAIL="noreply@royalpalaceantsirabe.com"
-
-# Server
-PORT=4000
-NODE_ENV=development
-```
-
-### 3. Start MySQL and initialize the database
-
-```bash
-docker compose up -d
-```
-
-The Compose service initializes an empty database from `db/schema.sql`. For a MySQL server initialized without Docker, run:
-
-```bash
 npm run db:init
-```
-
-### 4. Seed Initial Content
-
-```bash
-npm run db:seed
-```
-
-Create the first admin account interactively with `npm run create-admin`.
-
-### Existing database migration
-
-For a database created before editable room and event-room content was added, run these statements once before starting the updated API. Fresh databases receive the same columns from `db/schema.sql`.
-
-```sql
-ALTER TABLE rooms
-  ADD COLUMN name VARCHAR(191) NULL,
-  ADD COLUMN name_en VARCHAR(191) NULL,
-  ADD COLUMN description TEXT NULL,
-  ADD COLUMN description_en TEXT NULL;
-
-ALTER TABLE event_rooms
-  ADD COLUMN name VARCHAR(191) NULL,
-  ADD COLUMN name_en VARCHAR(191) NULL,
-  ADD COLUMN description TEXT NULL,
-  ADD COLUMN description_en TEXT NULL,
-  ADD COLUMN capacity INT NULL,
-  ADD COLUMN schedule VARCHAR(191) NULL,
-  ADD COLUMN price DECIMAL(10,2) NULL,
-  ADD COLUMN currency VARCHAR(8) NULL;
-```
-
-The new columns are nullable so existing seeded rows continue to use their frontend translation keys. Create the initial administrator with `npm run create-admin`; then sign in at `/admin/login` in the frontend.
-
-### 5. Start Development Server
-
-```bash
+npm run seed
 npm run dev
 ```
 
-The API will be available at `http://localhost:4000`
+The API is available at `http://localhost:4000`. The local seed provides this shared development account:
+
+```text
+Email:    admin@royalpalace.test
+Password: DevAdmin123!
+```
+
+The seed is idempotent and creates the same room, restaurant, spa, event-room, and admin records on every fresh database. Bookings, contact messages, and newsletter subscriptions stay empty because they are transactional/user-submitted data, not default configuration. Do not run the local seed in production.
+
+`npm run db:reset` is an optional destructive reset of the local schema and data; it recreates the schema and runs the seed. `npm run create-admin` remains an optional interactive utility for provisioning a separate admin on a database that has no admin users; it is not part of local setup.
+
+For databases created before editable room and event-room content was added, run `npm run db:migrate:admin-content` once. Fresh databases already include those columns in `db/schema.sql`; this migration is not part of local setup.
 
 ## 📡 API Endpoints
 
@@ -182,8 +113,8 @@ The API will be available at `http://localhost:4000`
 - `POST /api/auth/login` - Admin login
   ```json
   {
-    "email": "admin@royalpalaceantsirabe.com",
-    "password": "admin123"
+    "email": "admin@royalpalace.test",
+    "password": "DevAdmin123!"
   }
   ```
 - `POST /api/auth/register` - Register new admin user
@@ -203,6 +134,8 @@ Royal-Backend/
 ├── db/
 │   ├── schema.sql           # MySQL schema
 │   ├── seed.sql             # Idempotent content seed
+│   ├── seed.ts              # Content and local admin seed
+│   ├── init.ts              # Starts/initializes local MySQL
 │   └── run-sql.ts           # Windows-friendly SQL runner
 ├── src/
 │   ├── server.ts             # Main server entry point
@@ -245,7 +178,7 @@ The backend automatically sends email notifications to hotel staff (`royalpalace
 - A contact message is submitted
 - An event inquiry is received
 
-Emails are sent via Resend. Make sure your `RESEND_API_KEY` and `FROM_EMAIL` are configured in `.env`.
+Emails are sent via Resend when `RESEND_API_KEY` is configured. The local default leaves it blank, so email notifications are skipped; ask the team lead for a key if email delivery is needed.
 
 ## 🔒 Authentication
 
