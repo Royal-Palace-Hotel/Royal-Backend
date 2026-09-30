@@ -106,7 +106,8 @@ The new columns are nullable so existing seeded rows continue to use their front
 ```bash
 npm run dev
 ```
-
+a installer 
+ npm install mysql2 dotenv
 The API will be available at `http://localhost:4000`
 
 ## 📡 API Endpoints

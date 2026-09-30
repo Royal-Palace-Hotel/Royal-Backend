@@ -2,8 +2,12 @@ import { Resend } from 'resend'
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@royalpalaceantsirabe.com'
-const HOTEL_EMAIL = 'royalpalace.resa@moov.mg' // Hotel's email from frontend
+const HOTEL_EMAIL = process.env.ADMIN_EMAIL || 'royalpalace.resa@moov.mg'
 
+const esc = (s: unknown) =>
+  String(s ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!)
+  )
 export async function sendBookingEmail(booking: any) {
   try {
     if (!resend) {
@@ -71,36 +75,53 @@ export async function sendContactEmail(contact: any) {
     console.error('Failed to send contact email:', error)
   }
 }
-
 export async function sendEventInquiryEmail(inquiry: any) {
   try {
     if (!resend) {
       console.warn('Event inquiry email skipped: RESEND_API_KEY is not configured')
       return
     }
-    const { data, error } = await resend.emails.send({
+
+    const eventDate = inquiry.eventDate
+      ? new Date(inquiry.eventDate).toLocaleDateString('fr-FR')
+      : 'Non précisée'
+
+    // 1. Email à l'admin (Répondre → écrit au client)
+    const adminRes = await resend.emails.send({
       from: FROM_EMAIL,
       to: HOTEL_EMAIL,
-      subject: `Event Inquiry - ${inquiry.name}`,
+      replyTo: inquiry.email,
+      subject: `Demande de devis événement - ${inquiry.name}`,
       html: `
-        <h2>New Event Inquiry</h2>
-        <p><strong>Name:</strong> ${inquiry.name}</p>
-        <p><strong>Email:</strong> ${inquiry.email}</p>
-        <p><strong>Phone:</strong> ${inquiry.phone || 'Not provided'}</p>
-        <p><strong>Subject:</strong> ${inquiry.subject || 'Not provided'}</p>
-        <p><strong>Event Date:</strong> ${new Date(inquiry.eventDate).toLocaleDateString()}</p>
-        <p><strong>Guest Count:</strong> ${inquiry.guestCount}</p>
-        <p><strong>Message:</strong></p>
-        <p>${inquiry.message}</p>
-        <p><strong>Sent:</strong> ${new Date(inquiry.createdAt).toLocaleString()}</p>
+        <h2>Nouvelle demande de devis</h2>
+        <p><strong>Nom :</strong> ${esc(inquiry.name)}</p>
+        <p><strong>Email :</strong> ${esc(inquiry.email)}</p>
+        <p><strong>Téléphone :</strong> ${esc(inquiry.phone) || 'Non renseigné'}</p>
+        <p><strong>Sujet :</strong> ${esc(inquiry.subject) || 'Non renseigné'}</p>
+        <p><strong>Date :</strong> ${eventDate}</p>
+        <p><strong>Invités :</strong> ${esc(inquiry.guestCount)}</p>
+        <p><strong>Message :</strong></p>
+        <p>${esc(inquiry.message).replace(/\n/g, '<br>')}</p>
       `,
     })
+    if (adminRes.error) console.error('Admin email error:', adminRes.error)
 
-    if (error) {
-      console.error('Email send error:', error)
-    } else {
-      console.log('Event inquiry email sent:', data)
-    }
+    // 2. Confirmation au client
+    const clientRes = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: inquiry.email,
+      replyTo: HOTEL_EMAIL,
+      subject: 'Nous avons bien reçu votre demande de devis',
+      html: `
+        <p>Bonjour ${esc(inquiry.name)},</p>
+        <p>Merci pour votre demande. Notre équipe événementielle vous répondra dans les plus brefs délais.</p>
+        <p><strong>Récapitulatif :</strong><br>
+        Date : ${eventDate}<br>
+        Invités : ${esc(inquiry.guestCount)}</p>
+        <p>Cordialement,<br>L'équipe Royal Palace</p>
+      `,
+    })
+    if (clientRes.error) console.error('Client email error:', clientRes.error)
   } catch (error) {
     console.error('Failed to send event inquiry email:', error)
   }
