@@ -1,10 +1,10 @@
 USE royal_palace;
 
-INSERT INTO rooms (id, slug, translation_key, price, currency, size, max_guests, total_units) VALUES
-  ('classic', 'chambre-classique', 'classic', 65, 'EUR', 22, 2, 10),
-  ('superior', 'chambre-superieure', 'superior', 95, 'EUR', 28, 3, 8),
-  ('deluxe', 'chambre-deluxe', 'deluxe', 130, 'EUR', 34, 3, 6),
-  ('suite', 'suite-royale', 'suite', 220, 'EUR', 55, 4, 4)
+INSERT INTO rooms (id, slug, translation_key, name, name_en, description, description_en, price, currency, size, max_guests, total_units) VALUES
+  ('classic', 'chambre-classique', 'classic', NULL, NULL, NULL, NULL, 65, 'EUR', 22, 2, 10),
+  ('superior', 'chambre-superieure', 'superior', NULL, NULL, NULL, NULL, 95, 'EUR', 28, 3, 8),
+  ('deluxe', 'chambre-deluxe', 'deluxe', NULL, NULL, NULL, NULL, 130, 'EUR', 34, 3, 6),
+  ('suite', 'suite-royale', 'suite', NULL, NULL, NULL, NULL, 220, 'EUR', 55, 4, 4)
 ON DUPLICATE KEY UPDATE
   slug = VALUES(slug), translation_key = VALUES(translation_key), price = VALUES(price),
   currency = VALUES(currency), size = VALUES(size), max_guests = VALUES(max_guests), total_units = VALUES(total_units);
@@ -59,8 +59,8 @@ INSERT INTO spa_treatments (id, `key`, duration_key, price, sort_order) VALUES
   ('t5', 'treatment5', 'treatment5Duration', 95000, 4)
 ON DUPLICATE KEY UPDATE `key` = VALUES(`key`), duration_key = VALUES(duration_key), price = VALUES(price), sort_order = VALUES(sort_order);
 
-INSERT INTO event_rooms (id, `key`, image, sort_order) VALUES
-  ('room1', 'room1', '/images/events/events-1.jpg', 0),
-  ('room2', 'room2', '/images/events/events-2.jpg', 1),
-  ('room3', 'room3', '/images/events/events-3.jpg', 2)
+INSERT INTO event_rooms (id, `key`, name, name_en, description, description_en, image, capacity, schedule, price, currency, sort_order) VALUES
+  ('room1', 'room1', NULL, NULL, NULL, NULL, '/images/events/events-1.jpg', NULL, NULL, NULL, NULL, 0),
+  ('room2', 'room2', NULL, NULL, NULL, NULL, '/images/events/events-2.jpg', NULL, NULL, NULL, NULL, 1),
+  ('room3', 'room3', NULL, NULL, NULL, NULL, '/images/events/events-3.jpg', NULL, NULL, NULL, NULL, 2)
 ON DUPLICATE KEY UPDATE `key` = VALUES(`key`), image = VALUES(image), sort_order = VALUES(sort_order);

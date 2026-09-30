@@ -2,10 +2,10 @@ import { Request, Response, NextFunction } from 'express'
 import { ZodSchema, ZodError } from 'zod'
 import { AppError } from './errorHandler'
 
-export function validate(schema: ZodSchema) {
+export function validate(schema: ZodSchema, source: 'body' | 'params' | 'query' = 'body') {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      schema.parse(req.body)
+      schema.parse(req[source])
       next()
     } catch (error) {
       if (error instanceof ZodError && error.issues) {

@@ -77,6 +77,30 @@ npm run db:seed
 
 Create the first admin account interactively with `npm run create-admin`.
 
+### Existing database migration
+
+For a database created before editable room and event-room content was added, run these statements once before starting the updated API. Fresh databases receive the same columns from `db/schema.sql`.
+
+```sql
+ALTER TABLE rooms
+  ADD COLUMN name VARCHAR(191) NULL,
+  ADD COLUMN name_en VARCHAR(191) NULL,
+  ADD COLUMN description TEXT NULL,
+  ADD COLUMN description_en TEXT NULL;
+
+ALTER TABLE event_rooms
+  ADD COLUMN name VARCHAR(191) NULL,
+  ADD COLUMN name_en VARCHAR(191) NULL,
+  ADD COLUMN description TEXT NULL,
+  ADD COLUMN description_en TEXT NULL,
+  ADD COLUMN capacity INT NULL,
+  ADD COLUMN schedule VARCHAR(191) NULL,
+  ADD COLUMN price DECIMAL(10,2) NULL,
+  ADD COLUMN currency VARCHAR(8) NULL;
+```
+
+The new columns are nullable so existing seeded rows continue to use their frontend translation keys. Create the initial administrator with `npm run create-admin`; then sign in at `/admin/login` in the frontend.
+
 ### 5. Start Development Server
 
 ```bash
@@ -165,6 +189,13 @@ The API will be available at `http://localhost:4000`
   ```
 - `POST /api/auth/register` - Register new admin user
 - `GET /api/auth/me` - Get current user (requires JWT token)
+
+### Admin API (requires `Authorization: Bearer <token>`)
+- Rooms: `GET/POST /api/admin/rooms`, `GET/PUT/DELETE /api/admin/rooms/:id`
+- Menu sections/items: CRUD at `/api/admin/menu/sections` and `/api/admin/menu/items`
+- Event rooms: CRUD at `/api/admin/event-rooms`
+- Bookings: `GET /api/admin/bookings` (optional `status`, `from`, and `to` filters), `PATCH /api/admin/bookings/:id`
+- Contact messages: `GET /api/admin/contact-messages` (optional `type` and `status` filters), `PATCH /api/admin/contact-messages/:id`
 
 ## 🏗️ Project Structure
 

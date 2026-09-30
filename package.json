@@ -8,6 +8,7 @@
     "start": "node dist/server.js",
     "db:init": "tsx db/run-sql.ts db/schema.sql",
     "db:seed": "tsx db/run-sql.ts db/seed.sql",
+    "db:migrate:admin-content": "tsx db/migrate-admin-content-columns.ts",
     "db:reset": "tsx db/run-sql.ts db/reset.sql && npm run db:init && npm run db:seed",
     "create-admin": "tsx db/create-admin.ts"
   },

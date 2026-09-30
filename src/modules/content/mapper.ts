@@ -12,6 +12,10 @@ export interface RoomContent {
   id: string
   slug: string
   translationKey: string
+  name: string | null
+  nameEn: string | null
+  description: string | null
+  descriptionEn: string | null
   price: number
   currency: string
   images: string[]
@@ -47,6 +51,10 @@ export function mapRoom(
     id: room.slug,
     slug: room.slug,
     translationKey: room.translation_key,
+    name: room.name,
+    nameEn: room.name_en,
+    description: room.description,
+    descriptionEn: room.description_en,
     price: room.price,
     currency: room.currency,
     images: images.map(row => row.image),
@@ -89,5 +97,18 @@ export function mapSpaTreatment(row: SpaTreatmentRow) {
 }
 
 export function mapEventRoom(row: EventRoomRow) {
-  return { id: row.id, key: row.key, image: row.image, order: row.sort_order }
+  return {
+    id: row.id,
+    key: row.key,
+    name: row.name,
+    nameEn: row.name_en,
+    description: row.description,
+    descriptionEn: row.description_en,
+    image: row.image,
+    capacity: row.capacity,
+    schedule: row.schedule,
+    price: row.price,
+    currency: row.currency,
+    order: row.sort_order,
+  }
 }

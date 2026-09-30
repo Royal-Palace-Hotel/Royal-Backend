@@ -6,7 +6,7 @@ import pool from '../../config/db'
 import { AdminUserRow } from '../../types/database'
 import { AppError } from '../../middleware/errorHandler'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key'
+export const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key'
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
