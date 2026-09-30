@@ -1,14 +1,13 @@
 import pool from '../../config/db'
 import {
   EventRoomRow,
-  MenuItemRow,
-  MenuSectionRow,
   RoomAmenityRow,
   RoomImageRow,
   RoomRow,
   SpaTreatmentRow,
 } from '../../types/database'
-import { mapEventRoom, mapMenuSection, mapRoom, mapSpaTreatment } from './mapper'
+import { mapEventRoom, mapRoom, mapSpaTreatment } from './mapper'
+import { getRestaurantMenu } from '../restaurant/service'
 
 export async function getRooms() {
   const [rooms] = await pool.execute<RoomRow[]>(
@@ -43,26 +42,7 @@ export async function getRooms() {
   ))
 }
 
-export async function getMenu() {
-  const [sections] = await pool.execute<MenuSectionRow[]>(
-    'SELECT id, title, title_en, sort_order FROM menu_sections ORDER BY sort_order ASC',
-  )
-  if (sections.length === 0) return []
-
-  const sectionIds = sections.map(section => section.id)
-  const placeholders = sectionIds.map(() => '?').join(', ')
-  const [items] = await pool.execute<MenuItemRow[]>(
-    `SELECT id, name, name_en, description, description_en, price, sort_order, section_id FROM menu_items WHERE section_id IN (${placeholders}) ORDER BY section_id, sort_order ASC`,
-    sectionIds,
-  )
-  const itemsBySection = new Map<string, MenuItemRow[]>()
-
-  for (const item of items) {
-    itemsBySection.set(item.section_id, [...(itemsBySection.get(item.section_id) ?? []), item])
-  }
-
-  return sections.map(section => mapMenuSection(section, itemsBySection.get(section.id) ?? []))
-}
+export const getMenu = getRestaurantMenu
 
 export async function getSpaTreatments() {
   const [rows] = await pool.execute<SpaTreatmentRow[]>(
