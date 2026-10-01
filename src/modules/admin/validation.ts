@@ -17,9 +17,9 @@ export const roomSchema = z.object({
   slug: z.string().trim().min(1).max(191),
   translationKey: z.string().trim().min(1).max(191).optional(),
   name: z.string().trim().min(1).max(191),
-  nameEn: z.string().trim().min(1).max(191),
+  nameEn: z.string().trim().max(191).optional(),
   description: z.string().trim().min(1),
-  descriptionEn: z.string().trim().min(1),
+  descriptionEn: z.string().trim().optional(),
   price: z.coerce.number().nonnegative(),
   currency: z.string().trim().min(1).max(8),
   size: z.coerce.number().int().positive(),
@@ -31,15 +31,15 @@ export const roomSchema = z.object({
 
 export const menuSectionSchema = z.object({
   title: z.string().trim().min(1).max(191),
-  titleEn: z.string().trim().min(1).max(191),
+  titleEn: z.string().trim().max(191).optional(),
   sortOrder: z.coerce.number().int(),
 })
 
 export const menuItemSchema = z.object({
   name: z.string().trim().min(1).max(191),
-  nameEn: z.string().trim().min(1).max(191),
+  nameEn: z.string().trim().max(191).optional(),
   description: z.string().trim().min(1),
-  descriptionEn: z.string().trim().min(1),
+  descriptionEn: z.string().trim().optional(),
   price: z.coerce.number().nonnegative(),
   sectionId: z.string().trim().min(1).max(191),
   sortOrder: z.coerce.number().int(),
@@ -48,9 +48,9 @@ export const menuItemSchema = z.object({
 export const eventRoomSchema = z.object({
   key: z.string().trim().min(1).max(191).optional(),
   name: z.string().trim().min(1).max(191),
-  nameEn: z.string().trim().min(1).max(191),
+  nameEn: z.string().trim().max(191).optional(),
   description: z.string().trim().min(1),
-  descriptionEn: z.string().trim().min(1),
+  descriptionEn: z.string().trim().optional(),
   image: z.string().trim().min(1).max(1024),
   capacity: optionalCapacity,
   schedule: optionalText,

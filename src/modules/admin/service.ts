@@ -8,8 +8,34 @@ interface AdminRow extends RowDataPacket {
   [key: string]: any
 }
 
+async function translateToEnglish(value: string): Promise<string> {
+  const trimmed = value?.trim() || ''
+  if (!trimmed) return ''
+
+  try {
+    const response = await fetch(
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=fr&tl=en&dt=t&q=${encodeURIComponent(trimmed)}`,
+      { signal: AbortSignal.timeout(1500) },
+    )
+    if (!response.ok) return trimmed
+    const payload = await response.json() as any[]
+    const translated = Array.isArray(payload) && Array.isArray(payload[0])
+      ? payload[0].map((segment: any[]) => segment?.[0] || '').join('')
+      : ''
+    return translated.trim() || trimmed
+  } catch {
+    return trimmed
+  }
+}
+
+async function ensureEnglishText(frenchText: string, englishText?: string | null) {
+  const candidate = englishText?.trim() || ''
+  if (candidate) return candidate
+  return translateToEnglish(frenchText)
+}
+
 type RoomInput = {
-  slug: string; translationKey?: string; name: string; nameEn: string; description: string; descriptionEn: string
+  slug: string; translationKey?: string; name: string; nameEn?: string; description: string; descriptionEn?: string
   price: number; currency: string; size: number; maxGuests: number; totalUnits: number; images: string[]; amenities: string[]
 }
 
@@ -46,13 +72,15 @@ async function writeRoom(input: RoomInput, id: string = randomUUID()) {
   try {
     await connection.beginTransaction()
     const translationKey = input.translationKey || id
+    const nameEn = await ensureEnglishText(input.name, input.nameEn)
+    const descriptionEn = await ensureEnglishText(input.description, input.descriptionEn)
     await connection.execute(
       `INSERT INTO rooms (id, slug, translation_key, name, name_en, description, description_en, price, currency, size, max_guests, total_units)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE slug = VALUES(slug), translation_key = VALUES(translation_key), name = VALUES(name), name_en = VALUES(name_en),
        description = VALUES(description), description_en = VALUES(description_en), price = VALUES(price), currency = VALUES(currency),
        size = VALUES(size), max_guests = VALUES(max_guests), total_units = VALUES(total_units)`,
-      [id, input.slug, translationKey, input.name, input.nameEn, input.description, input.descriptionEn, input.price, input.currency,
+      [id, input.slug, translationKey, input.name, nameEn, input.description, descriptionEn, input.price, input.currency,
         input.size, input.maxGuests, input.totalUnits],
     )
     await connection.execute('DELETE FROM room_images WHERE room_id = ?', [id])
@@ -90,12 +118,13 @@ export async function listMenuSections() {
   )
   return rows
 }
-export async function saveMenuSection(input: { title: string; titleEn: string; sortOrder: number }, id?: string) {
+export async function saveMenuSection(input: { title: string; titleEn?: string; sortOrder: number }, id?: string) {
   const itemId = id || randomUUID()
+  const titleEn = await ensureEnglishText(input.title, input.titleEn)
   await pool.execute(
     `INSERT INTO menu_sections (id, title, title_en, sort_order) VALUES (?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE title = VALUES(title), title_en = VALUES(title_en), sort_order = VALUES(sort_order)`,
-    [itemId, input.title, input.titleEn, input.sortOrder],
+    [itemId, input.title, titleEn, input.sortOrder],
   )
   return (await listMenuSections()).find((row) => row.id === itemId)
 }
@@ -111,14 +140,16 @@ export async function listMenuItems() {
   return rows
 }
 export async function saveMenuItem(input: {
-  name: string; nameEn: string; description: string; descriptionEn: string; price: number; sectionId: string; sortOrder: number
+  name: string; nameEn?: string; description: string; descriptionEn?: string; price: number; sectionId: string; sortOrder: number
 }, id?: string) {
   const itemId = id || randomUUID()
+  const nameEn = await ensureEnglishText(input.name, input.nameEn)
+  const descriptionEn = await ensureEnglishText(input.description, input.descriptionEn)
   await pool.execute(
     `INSERT INTO menu_items (id, name, name_en, description, description_en, price, sort_order, section_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE name = VALUES(name), name_en = VALUES(name_en), description = VALUES(description),
      description_en = VALUES(description_en), price = VALUES(price), sort_order = VALUES(sort_order), section_id = VALUES(section_id)`,
-    [itemId, input.name, input.nameEn, input.description, input.descriptionEn, input.price, input.sortOrder, input.sectionId],
+    [itemId, input.name, nameEn, input.description, descriptionEn, input.price, input.sortOrder, input.sectionId],
   )
   return (await listMenuItems()).find((row) => row.id === itemId)
 }
@@ -135,17 +166,19 @@ export async function listEventRooms() {
   return rows
 }
 export async function saveEventRoom(input: {
-  key?: string; name: string; nameEn: string; description: string; descriptionEn: string; image: string
+  key?: string; name: string; nameEn?: string; description: string; descriptionEn?: string; image: string
   capacity?: number | null; schedule?: string | null; price?: number | null; currency?: string | null; sortOrder: number
 }, id?: string) {
   const itemId = id || randomUUID()
+  const nameEn = await ensureEnglishText(input.name, input.nameEn)
+  const descriptionEn = await ensureEnglishText(input.description, input.descriptionEn)
   await pool.execute(
     `INSERT INTO event_rooms (id, \`key\`, name, name_en, description, description_en, image, capacity, schedule, price, currency, sort_order)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE \`key\` = VALUES(\`key\`), name = VALUES(name), name_en = VALUES(name_en), description = VALUES(description),
      description_en = VALUES(description_en), image = VALUES(image), capacity = VALUES(capacity), schedule = VALUES(schedule),
      price = VALUES(price), currency = VALUES(currency), sort_order = VALUES(sort_order)`,
-    [itemId, input.key || itemId, input.name, input.nameEn, input.description, input.descriptionEn, input.image,
+    [itemId, input.key || itemId, input.name, nameEn, input.description, descriptionEn, input.image,
       input.capacity ?? null, input.schedule ?? null, input.price ?? null, input.currency ?? null, input.sortOrder],
   )
   return (await listEventRooms()).find((row) => row.id === itemId)

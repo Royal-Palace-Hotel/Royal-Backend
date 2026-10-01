@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authMiddleware } from '../../middleware/authMiddleware'
 import { validate } from '../../middleware/validate'
+import { handleImageUpload } from './upload'
 import * as controller from './controller'
 import {
   bookingStatusSchema, bookingsQuerySchema, contactStatusSchema, eventRoomSchema, idSchema,
@@ -9,6 +10,11 @@ import {
 
 const router = Router()
 router.use(authMiddleware)
+
+router.post('/uploads', handleImageUpload, (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Choose an image file to upload.' })
+  res.status(201).json({ data: { path: `/uploads/${req.file.filename}` } })
+})
 
 router.get('/rooms', controller.listRooms)
 router.post('/rooms', validate(roomSchema), controller.createRoom)
