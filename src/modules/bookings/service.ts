@@ -37,9 +37,12 @@ export interface BookingRecord {
   room: ReturnType<typeof mapRoom>
 }
 
+const ROOM_FIELDS =
+  'id, slug, translation_key, name, name_en, description, description_en, price, currency, size, max_guests, total_units'
+
 async function findRoom(roomId: string) {
   const [rows] = await pool.execute<RoomRow[]>(
-    'SELECT id, slug, translation_key, price, currency, size, max_guests, total_units FROM rooms WHERE id = ? OR slug = ? OR translation_key = ? LIMIT 1',
+    `SELECT ${ROOM_FIELDS} FROM rooms WHERE id = ? OR slug = ? OR translation_key = ? LIMIT 1`,
     [roomId, roomId, roomId],
   )
   return rows[0]
@@ -120,7 +123,7 @@ export async function createBooking(input: {
   rooms: number
   adults: number
   children: number
-  roomId: string
+  roomId?: string
 }) {
   const checkIn = new Date(input.checkIn)
   const checkOut = new Date(input.checkOut)
@@ -136,23 +139,46 @@ export async function createBooking(input: {
     await connection.beginTransaction()
     transactionStarted = true
 
-    let [rooms] = await connection.execute<RoomRow[]>(
-      'SELECT id, slug, translation_key, price, currency, size, max_guests, total_units FROM rooms WHERE id = ? FOR UPDATE',
-      [input.roomId],
-    )
-    if (rooms.length === 0) {
-      [rooms] = await connection.execute<RoomRow[]>(
-        'SELECT id, slug, translation_key, price, currency, size, max_guests, total_units FROM rooms WHERE slug = ? OR translation_key = ? LIMIT 1 FOR UPDATE',
-        [input.roomId, input.roomId],
+    // Rows are locked FOR UPDATE so two concurrent bookings cannot both pass
+    // the availability check and oversell the same room.
+    let candidates: RoomRow[]
+    if (input.roomId) {
+      const [byId] = await connection.execute<RoomRow[]>(
+        `SELECT ${ROOM_FIELDS} FROM rooms WHERE id = ? OR slug = ? OR translation_key = ? LIMIT 1 FOR UPDATE`,
+        [input.roomId, input.roomId, input.roomId],
       )
+      if (byId.length === 0) throw new AppError('Room not found', 404)
+      candidates = byId
+    } else {
+      // No room chosen on the booking page: take the cheapest one that fits.
+      const [all] = await connection.execute<RoomRow[]>(
+        `SELECT ${ROOM_FIELDS} FROM rooms WHERE max_guests >= ? ORDER BY price ASC FOR UPDATE`,
+        [Math.ceil((input.adults + input.children) / input.rooms)],
+      )
+      if (all.length === 0) throw new AppError('No room can accommodate this party size', 409)
+      candidates = all
     }
-    const room = rooms[0]
-    if (!room) throw new AppError('Room not found', 404)
 
-    const bookedRooms = await sumBookedUnits(connection, room.id, checkIn, checkOut)
-    const availableRooms = room.total_units - bookedRooms
-    if (availableRooms < input.rooms) {
-      throw new AppError(`Only ${availableRooms} room(s) available for the selected dates`, 409)
+    let room: RoomRow | undefined
+    let availableRooms = 0
+    for (const candidate of candidates) {
+      const booked = await sumBookedUnits(connection, candidate.id, checkIn, checkOut)
+      const free = candidate.total_units - booked
+      if (free >= input.rooms) {
+        room = candidate
+        availableRooms = free
+        break
+      }
+      if (!room) availableRooms = Math.max(availableRooms, free)
+    }
+
+    if (!room) {
+      throw new AppError(
+        input.roomId
+          ? `Only ${availableRooms} room(s) available for the selected dates`
+          : 'No rooms available for the selected dates',
+        409,
+      )
     }
 
     const id = randomUUID()

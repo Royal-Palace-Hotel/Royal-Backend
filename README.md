@@ -1,322 +1,371 @@
-# Royal Palace Antsirabe - Backend API
+# Royal Palace Antsirabe — API
 
-Complete backend API for the Royal Palace Antsirabe hotel website, built with Node.js, TypeScript, Express, mysql2, and MySQL 8.
+API du site de l'hôtel Royal Palace Antsirabe : contenu éditorial, réservations,
+formulaires de contact, newsletter et back-office d'administration.
 
-## 🚀 Tech Stack
+- **Runtime** : Node.js 18+ / TypeScript
+- **Framework** : Express 4
+- **Base de données** : MySQL 8 (via `mysql2/promise`)
+- **Validation** : Zod
+- **Authentification** : JWT + bcrypt
+- **E-mails** : Resend (optionnel)
 
-- **Runtime**: Node.js + TypeScript
-- **Framework**: Express.js
-- **Database driver**: mysql2/promise
-- **Database**: MySQL 8
-- **Validation**: Zod
-- **Authentication**: JWT (bcryptjs)
-- **Email**: Resend
-- **Dev Tools**: nodemon, tsx
+---
 
-## 📋 Prerequisites
-
-- Node.js 18+ and npm
-- MySQL 8, or Docker Compose
-- A Resend account for email notifications (free tier available)
-
-## 🔧 Setup Instructions
-
-### 1. Install Dependencies
+## Démarrage rapide
 
 ```bash
 npm install
+cp .env.example .env     # puis ajuste DATABASE_URL
+npm run db:setup         # crée le schéma + insère le contenu de départ
+npm run create-admin -- admin@royalpalaceantsirabe.com tonMotDePasse admin
+npm run dev              # http://localhost:4000
 ```
 
-### 2. Configure Environment Variables
+Vérification : `curl http://localhost:4000/health`
 
-Copy the example environment file and fill in your credentials:
+### Configurer `DATABASE_URL`
+
+Le format est `mysql://utilisateur:motdepasse@hote:port/base`.
+
+| Installation | Valeur |
+| --- | --- |
+| Laragon / XAMPP (root sans mot de passe) | `mysql://root:@127.0.0.1:3306/royal_palace` |
+| Docker Compose (`docker compose up -d`) | `mysql://royal:royal@127.0.0.1:3306/royal_palace` |
+
+Si la connexion échoue, l'API s'arrête immédiatement avec un message explicite
+plutôt que de renvoyer une erreur 500 sur chaque requête.
+
+---
+
+## Scripts
+
+| Commande | Rôle |
+| --- | --- |
+| `npm run dev` | Serveur de développement (redémarrage automatique) |
+| `npm run build` | Compile TypeScript vers `dist/` |
+| `npm start` | Lance le serveur compilé |
+| `npm run typecheck` | Vérifie les types sans générer de fichiers |
+| `npm run test:api` | Test global de l'API (voir ci-dessous) |
+| `npm run db:setup` | `db:init` + `db:migrate:admin-content` + `db:seed` |
+| `npm run db:init` | Crée la base et les tables (`db/schema.sql`) |
+| `npm run db:seed` | Insère le contenu de départ, sans écraser les modifications d'id existants |
+| `npm run db:migrate:admin-content` | Ajoute les colonnes éditables aux bases créées avant leur introduction |
+| `npm run db:reset` | ⚠️ Supprime toutes les tables, puis recrée et réinsère |
+| `npm run create-admin` | Crée (ou réinitialise) un compte d'administration |
+
+`create-admin` accepte des arguments pour un usage non interactif :
 
 ```bash
-cp .env.example .env
+npm run create-admin -- email@domaine.com motdepasse admin
 ```
 
-Edit `.env` with your local MySQL connection and service credentials:
+Relancer la commande avec une adresse existante réinitialise son mot de passe.
 
-```env
-# Database (MySQL 8)
-DATABASE_URL="mysql://royal:royal@127.0.0.1:3306/royal_palace"
-MYSQL_ROOT_PASSWORD=root
-MYSQL_DATABASE=royal_palace
-MYSQL_USER=royal
-MYSQL_PASSWORD=royal
+---
 
-# JWT Secret (generate a secure random string)
-JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
+## Test global de l'API
 
-# Email (Resend)
-RESEND_API_KEY="re_xxxxxxxxxxxxx"
-FROM_EMAIL="noreply@royalpalaceantsirabe.com"
-
-# Server
-PORT=4000
-NODE_ENV=development
-```
-
-### 3. Start MySQL and initialize the database
+`tests/api.test.ts` interroge l'API en HTTP, comme le ferait le front, et
+vérifie 208 points : contenu public, disponibilité, réservations (dont
+surréservation et concurrence), contact, devis, newsletter, authentification,
+rôles, protection du back-office, CRUD complet (chambres, carte, salles, spa,
+galerie, Découvrir), envoi d'images, tableau de bord, pagination, recherche,
+tri, exports CSV, gestion des comptes et journal des actions.
 
 ```bash
-docker compose up -d
+npm run dev        # terminal 1
+npm run test:api   # terminal 2
 ```
 
-The Compose service initializes an empty database from `db/schema.sql`. For a MySQL server initialized without Docker, run:
+| Option | Rôle |
+| --- | --- |
+| `--base=http://host:port/api` | Vise une autre API (défaut : `$API_URL`) |
+| `--email=` / `--password=` | Identifiants admin (défaut : `$TEST_ADMIN_EMAIL` / `$TEST_ADMIN_PASSWORD`) |
+| `--verbose` | Affiche les réponses complètes des vérifications en échec |
+| `--keep` | Conserve les données créées par le test |
+
+Le script sort en code 1 au moindre échec, ce qui permet de le brancher sur une
+intégration continue.
+
+**Il nettoie derrière lui.** Chaque exécution utilise un identifiant unique ;
+les chambres, sections, plats et salles créés sont supprimés via l'API, et les
+réservations, messages et inscriptions — qui n'ont pas d'endpoint de suppression
+— le sont en SQL via `DATABASE_URL`. La base revient à son état initial.
+
+**Il est rejouable.** Les assertions portent sur la forme des réponses, pas sur
+le nombre de lignes : ajouter des chambres depuis le back-office ne le fait pas
+échouer.
+
+**Limite de débit.** La suite consomme une bonne partie du quota d'écriture
+(30 requêtes / 15 min). Pour l'enchaîner plusieurs fois :
 
 ```bash
-npm run db:init
+DISABLE_RATE_LIMIT=true npm run dev
 ```
 
-### 4. Seed Initial Content
+Ce réglage est **ignoré quand `NODE_ENV=production`**. Redémarrer l'API remet
+également le compteur à zéro. Si des `429` surviennent, le script le signale
+explicitement en fin de rapport plutôt que de laisser croire à une régression.
 
-```bash
-npm run db:seed
+---
+
+## Variables d'environnement
+
+| Variable | Obligatoire | Rôle |
+| --- | --- | --- |
+| `DATABASE_URL` | oui | Connexion MySQL |
+| `JWT_SECRET` | en production | Signature des jetons. En développement, une valeur de repli est utilisée. |
+| `JWT_EXPIRES_IN` | non | Durée de validité du jeton (défaut `7d`) |
+| `ADMIN_INVITE_CODE` | non | Vide ⇒ `POST /api/auth/register` est désactivé |
+| `RESEND_API_KEY` | non | Vide ⇒ les e-mails sont ignorés sans faire échouer la requête |
+| `FROM_EMAIL` | non | Expéditeur vérifié chez Resend |
+| `HOTEL_EMAIL` | non | Destinataire des notifications (défaut `royalpalace.resa@moov.mg`) |
+| `PORT` | non | Défaut `4000` |
+| `NODE_ENV` | non | `development` ou `production` |
+| `CORS_ORIGIN` | en production | Origines autorisées, séparées par des virgules |
+| `DISABLE_RATE_LIMIT` | non | `true` désactive les limites de débit. Ignoré en production. |
+
+En développement, `localhost:5173`, `:3000` et `:3002` sont toujours autorisés.
+En production, **seule** la liste `CORS_ORIGIN` l'est : si elle est vide, toutes
+les requêtes cross-origin sont refusées.
+
+---
+
+## Endpoints
+
+Toutes les réponses sont du JSON. Les données utiles sont dans `data`, les
+erreurs dans `error` (avec `details` pour les erreurs de validation).
+
+### Public
+
+| Méthode | Chemin | Rôle |
+| --- | --- | --- |
+| `GET` | `/health` | État du serveur |
+| `GET` | `/api/content/rooms` | Chambres, avec images et équipements |
+| `GET` | `/api/content/menu` | Carte du restaurant (sections + plats) |
+| `GET` | `/api/content/spa` | Soins du spa |
+| `GET` | `/api/content/events` | Salles de réunion |
+| `GET` | `/api/content/gallery` | Images de la galerie, avec leur catégorie |
+| `GET` | `/api/content/discover` | `{ activities, attractions }` de la page Découvrir |
+| `GET` | `/api/restaurant/menu` | Identique à `/api/content/menu` |
+| `POST` | `/api/bookings/availability` | Disponibilité sur une période |
+| `POST` | `/api/bookings` | Création d'une réservation |
+| `POST` | `/api/contact` | Message de contact |
+| `POST` | `/api/contact/event-inquiry` | Demande de devis événement |
+| `POST` | `/api/newsletter` | Inscription à la newsletter |
+
+Les endpoints en écriture sont limités à 30 requêtes / 15 min par adresse IP.
+
+**Disponibilité** — `roomId` est facultatif ; sans lui, le calcul porte sur
+l'ensemble de l'hôtel.
+
+```json
+{ "checkIn": "2026-12-01", "checkOut": "2026-12-05", "rooms": 1, "roomId": "suite" }
 ```
 
-Create the first admin account interactively with `npm run create-admin`.
+**Réservation** — `roomId` est facultatif : s'il est absent, la chambre la moins
+chère pouvant accueillir le groupe et disponible sur la période est attribuée.
+`children` vaut `0` par défaut.
 
-### Existing database migration
-
-For a database created before editable room and event-room content was added, run these statements once before starting the updated API. Fresh databases receive the same columns from `db/schema.sql`.
-
-```sql
-ALTER TABLE rooms
-  ADD COLUMN name VARCHAR(191) NULL,
-  ADD COLUMN name_en VARCHAR(191) NULL,
-  ADD COLUMN description TEXT NULL,
-  ADD COLUMN description_en TEXT NULL;
-
-ALTER TABLE event_rooms
-  ADD COLUMN name VARCHAR(191) NULL,
-  ADD COLUMN name_en VARCHAR(191) NULL,
-  ADD COLUMN description TEXT NULL,
-  ADD COLUMN description_en TEXT NULL,
-  ADD COLUMN capacity INT NULL,
-  ADD COLUMN schedule VARCHAR(191) NULL,
-  ADD COLUMN price DECIMAL(10,2) NULL,
-  ADD COLUMN currency VARCHAR(8) NULL;
+```json
+{
+  "guestName": "Jean Dupont",
+  "guestEmail": "jean@example.com",
+  "guestPhone": "+261 34 49 040 40",
+  "checkIn": "2026-12-01",
+  "checkOut": "2026-12-05",
+  "rooms": 1,
+  "adults": 2,
+  "children": 0,
+  "roomId": "suite"
+}
 ```
 
-The new columns are nullable so existing seeded rows continue to use their frontend translation keys. Create the initial administrator with `npm run create-admin`; then sign in at `/admin/login` in the frontend.
+Le contrôle de disponibilité et l'insertion se font dans une transaction avec
+verrou (`SELECT … FOR UPDATE`) : deux réservations simultanées ne peuvent pas
+dépasser le nombre d'unités disponibles. En cas de dépassement, l'API répond
+`409`.
 
-### 5. Start Development Server
+### Authentification
 
-```bash
-npm run dev
+| Méthode | Chemin | Rôle |
+| --- | --- | --- |
+| `POST` | `/api/auth/login` | Connexion ⇒ `{ token, user }` |
+| `POST` | `/api/auth/register` | Création de compte, exige `adminInviteCode` |
+| `GET` | `/api/auth/me` | Compte courant (jeton requis) |
+
+Limite : 10 tentatives / 15 min par IP.
+
+### Administration — `Authorization: Bearer <token>` obligatoire
+
+| Ressource | Endpoints |
+| --- | --- |
+| Tableau de bord | `GET /api/admin/stats` |
+| Images | `POST /api/admin/uploads` · `DELETE /api/admin/uploads/:fichier` |
+| Chambres | `GET POST /api/admin/rooms` · `GET PUT DELETE /api/admin/rooms/:id` |
+| Sections de carte | `GET POST /api/admin/menu/sections` · `PUT DELETE /api/admin/menu/sections/:id` |
+| Plats | `GET POST /api/admin/menu/items` · `PUT DELETE /api/admin/menu/items/:id` |
+| Salles de réunion | `GET POST /api/admin/event-rooms` · `PUT DELETE /api/admin/event-rooms/:id` |
+| Soins du spa | `GET POST /api/admin/spa` · `PUT DELETE /api/admin/spa/:id` |
+| Galerie photo | `GET POST /api/admin/gallery` (filtre `category`) · `PUT DELETE /api/admin/gallery/:id` |
+| Page Découvrir | `GET POST /api/admin/discover` (filtre `type`) · `PUT DELETE /api/admin/discover/:id` |
+| Réservations | `GET /api/admin/bookings` · `GET /api/admin/bookings/:id` · `PATCH /api/admin/bookings/:id` · `GET /api/admin/bookings/export` |
+| Messages | `GET /api/admin/contact-messages` · `GET`/`PATCH`/`DELETE` `/:id` · `GET /api/admin/contact-messages/export` |
+| Abonnés | `GET /api/admin/subscribers` · `DELETE /api/admin/subscribers/:id` · `GET /api/admin/subscribers/export` |
+| Mon compte | `PUT /api/admin/account/password` |
+| Comptes † | `GET POST /api/admin/users` · `PUT DELETE /api/admin/users/:id` |
+| Journal † | `GET /api/admin/audit-log` (filtres `entity`, `action`, `limit`) |
+
+† réservé au rôle `admin` ; le rôle `staff` reçoit un `403`.
+
+**Listes paginées.** `bookings`, `contact-messages` et `subscribers` acceptent
+`page`, `perPage` (max 200), `q` (recherche plein texte) et, pour les
+réservations, `sort` (`createdAt`, `checkIn`, `checkOut`, `guestName`, `status`)
+et `order`. La réponse ajoute `meta` à côté de `data` :
+
+```json
+{ "data": [...], "meta": { "page": 1, "perPage": 25, "total": 132, "totalPages": 6 } }
 ```
-a installer 
- npm install mysql2 dotenv
-The API will be available at `http://localhost:4000`
 
-## 📡 API Endpoints
+**Exports CSV.** Les endpoints `/export` renvoient un fichier avec BOM UTF-8
+(sans quoi Excel sous Windows abîme les accents) et neutralisent les cellules
+commençant par `= + - @`, qu'Excel interpréterait comme des formules — les noms
+et messages viennent de visiteurs du site. Ils respectent les filtres courants.
 
-### Health Check
-- `GET /health` - Server health status
+**Images.** Le back-office n'accepte pas d'URL : on joint un fichier. Le champ
+envoie l'image en `multipart/form-data` (champ `files`, jusqu'à 12 à la fois) et
+reçoit en retour un chemin **relatif** `/uploads/<fichier>`, qui est ce qui est
+stocké en base — la base reste donc valable si le domaine de l'API change. Le
+front résout ce chemin contre l'origine de l'API (`resolveImageUrl`), tandis que
+les images livrées avec le site (`/images/...`) continuent d'être servies par le
+front.
 
-### Content API
-- `GET /api/content/rooms` - Get all rooms
-- `GET /api/content/menu` - Get restaurant menu (with sections and items)
-- `GET /api/content/spa` - Get spa treatments
-- `GET /api/content/events` - Get event rooms
-- `GET /api/content/gallery` - Get gallery images (placeholder)
-- `GET /api/content/discover` - Get discover content (placeholder)
+Formats acceptés : JPEG, PNG, WebP, AVIF, GIF ; 5 Mo par fichier. Le nom est
+entièrement régénéré et son extension déduite du type MIME, jamais du nom
+envoyé : un fichier « piege.php.jpg » est écrit en « <id>.jpg ». Les fichiers
+sont servis avec `X-Content-Type-Options: nosniff`, et avec
+`Cross-Origin-Resource-Policy: cross-origin` pour ce seul dossier — sans quoi le
+réglage par défaut de `helmet` empêcherait le front de les afficher.
 
-### Booking API
-- `POST /api/bookings/availability` - Check room availability
-  ```json
-  {
-    "checkIn": "2024-12-01",
-    "checkOut": "2024-12-05",
-    "rooms": 1
-  }
-  ```
-- `POST /api/bookings` - Create a booking
-  ```json
-  {
-    "guestName": "John Doe",
-    "guestEmail": "john@example.com",
-    "guestPhone": "+261 34 49 040 40",
-    "checkIn": "2024-12-01",
-    "checkOut": "2024-12-05",
-    "rooms": 1,
-    "adults": 2,
-    "children": 0,
-    "roomId": "superior"
-  }
-  ```
+Ils sont écrits dans `Royal-Backend/uploads/`, hors de Git. **En production,
+prévois un volume persistant pour ce dossier** : sur un hébergement au système
+de fichiers éphémère (Heroku, conteneur sans volume), les images disparaîtraient
+à chaque redéploiement. Remplacer une image ne supprime pas l'ancienne : le
+ménage se fait avec `DELETE /api/admin/uploads/:fichier`.
 
-### Contact API
-- `POST /api/contact` - Send contact message
-  ```json
-  {
-    "name": "John Doe",
-    "email": "john@example.com",
-    "phone": "+261 34 49 040 40",
-    "subject": "Room Inquiry",
-    "message": "I would like to book a room..."
-  }
-  ```
-- `POST /api/contact/event-inquiry` - Send event inquiry
-  ```json
-  {
-    "name": "John Doe",
-    "email": "john@example.com",
-    "phone": "+261 34 49 040 40",
-    "subject": "Wedding",
-    "message": "Planning a wedding...",
-    "eventDate": "2024-12-15",
-    "guestCount": "100"
-  }
-  ```
+**Comptes et sécurité.** Un compte désactivé est refusé dès sa requête suivante
+(et non à l'expiration de son jeton) : chaque requête d'administration revérifie
+son état et son rôle en base. On ne peut ni modifier son propre rôle, ni
+désactiver son propre compte, ni retirer le dernier administrateur actif. Toute
+création, modification, suppression, connexion et export est consignée dans
+`admin_audit_log`.
 
-### Newsletter API
-- `POST /api/newsletter` - Subscribe to newsletter
-  ```json
-  {
-    "email": "john@example.com"
-  }
-  ```
+> Toutes les routes d'administration vivent sous `/api/admin`. Aucun routeur ne
+> doit être monté sur `/api` seul : un routeur monté là s'applique à **toutes**
+> les routes `/api/*`, y compris les routes publiques et la connexion.
 
-### Auth API (Admin)
-- `POST /api/auth/login` - Admin login
-  ```json
-  {
-    "email": "admin@royalpalaceantsirabe.com",
-    "password": "admin123"
-  }
-  ```
-- `POST /api/auth/register` - Register new admin user
-- `GET /api/auth/me` - Get current user (requires JWT token)
+---
 
-### Admin API (requires `Authorization: Bearer <token>`)
-- Rooms: `GET/POST /api/admin/rooms`, `GET/PUT/DELETE /api/admin/rooms/:id`
-- Menu sections/items: CRUD at `/api/admin/menu/sections` and `/api/admin/menu/items`
-- Event rooms: CRUD at `/api/admin/event-rooms`
-- Bookings: `GET /api/admin/bookings` (optional `status`, `from`, and `to` filters), `PATCH /api/admin/bookings/:id`
-- Contact messages: `GET /api/admin/contact-messages` (optional `type` and `status` filters), `PATCH /api/admin/contact-messages/:id`
-
-## 🏗️ Project Structure
+## Structure
 
 ```
 Royal-Backend/
 ├── db/
-│   ├── schema.sql           # MySQL schema
-│   ├── seed.sql             # Idempotent content seed
-│   └── run-sql.ts           # Windows-friendly SQL runner
+│   ├── schema.sql                      # Schéma MySQL
+│   ├── seed.sql                        # Contenu de départ (idempotent)
+│   ├── reset.sql                       # Suppression des tables
+│   ├── run-sql.ts                      # Exécuteur de fichiers .sql
+│   ├── create-admin.ts                 # Création / réinitialisation d'un admin
+│   └── migrate-admin-content-columns.ts
 ├── src/
-│   ├── server.ts             # Main server entry point
-│   ├── config/db.ts          # mysql2 connection pool
-│   ├── middleware/           # Express middleware
-│   │   ├── errorHandler.ts   # Global error handling
-│   │   └── validate.ts       # Zod validation middleware
-│   ├── modules/              # Feature modules
-│   │   ├── bookings/         # Booking system
-│   │   ├── content/          # Content API (rooms, menu, etc.)
-│   │   ├── contact/          # Contact & event inquiries
-│   │   ├── newsletter/       # Newsletter subscriptions
-│   │   └── auth/             # Authentication & authorization
-│   ├── types/database.ts     # SQL row interfaces
-│   └── utils/email.ts        # Email service (Resend)
+│   ├── server.ts                       # Point d'entrée unique
+│   ├── config/
+│   │   ├── env.ts                      # Lecture et validation de l'environnement
+│   │   └── db.ts                       # Pool MySQL
+│   ├── middleware/
+│   │   ├── authMiddleware.ts           # Vérification JWT (+ requireAdmin)
+│   │   ├── errorHandler.ts             # Gestion centralisée des erreurs
+│   │   └── validate.ts                 # Validation Zod
+│   ├── modules/
+│   │   ├── content/                    # Lecture publique du contenu
+│   │   ├── restaurant/                 # Carte publique
+│   │   ├── bookings/                   # Disponibilité et réservations
+│   │   ├── contact/                    # Contact et demandes de devis
+│   │   ├── newsletter/                 # Inscriptions
+│   │   ├── auth/                       # Connexion et inscription
+│   │   └── admin/                      # CRUD du back-office
+│   ├── types/database.ts               # Interfaces des lignes SQL
+│   └── utils/email.ts                  # Envoi via Resend
+├── tests/api.test.ts                   # Test global de l'API (npm run test:api)
+├── uploads/                            # Images envoyées depuis le back-office (hors Git)
+├── _unused/                            # Anciens fichiers retirés de src/ (voir son README)
 ├── docker-compose.yml
-├── .env.example              # Environment variables template
-├── .gitignore
-├── package.json
-├── tsconfig.json
-└── README.md
+└── tsconfig.json
 ```
 
-## 🗄️ Database Schema
+---
 
-The MySQL schema creates these tables:
+## Base de données
 
-- `rooms`, `room_images`, and `room_amenities`
-- `bookings`
-- `menu_sections` and `menu_items`
-- `spa_treatments` and `event_rooms`
-- `contact_messages` (contact and event inquiry types)
-- `newsletter_subscribers` and `admin_users`
+`rooms`, `room_images`, `room_amenities`, `bookings`, `menu_sections`,
+`menu_items`, `spa_treatments`, `event_rooms`, `gallery_images`,
+`discover_items`, `contact_messages`, `newsletter_subscribers`, `admin_users`,
+`admin_audit_log`.
 
-## 📧 Email Notifications
+Le seed (`npm run db:seed`) reprend le contenu qui vivait jusqu'ici en dur dans
+le front : les 23 images de `src/data/gallery.ts`, les activités et lieux de la
+page Découvrir, et les libellés des soins du spa issus des fichiers de
+traduction. Il est **idempotent** et ne réécrit pas les champs que tu modifies
+au back-office (`rooms.name`, `rooms.description`…), afin qu'un `db:seed` n'efface
+pas tes saisies.
 
-The backend automatically sends email notifications to hotel staff (`royalpalace.resa@moov.mg`) when:
+`npm run db:setup` enchaîne la création des tables, la migration des colonnes et
+le seed. Pour une base créée avant l'ajout des colonnes éditables (`rooms.name`,
+`spa_treatments.duration`, `admin_users.is_active`, …),
+`npm run db:migrate:admin-content` ajoute uniquement celles qui manquent — la
+commande est sûre à relancer. Les nouvelles *tables* sont créées par
+`db/schema.sql`, en `CREATE TABLE IF NOT EXISTS`.
 
-- A new booking is created
-- A contact message is submitted
-- An event inquiry is received
+---
 
-Emails are sent via Resend. Make sure your `RESEND_API_KEY` and `FROM_EMAIL` are configured in `.env`.
+## E-mails
 
-## 🔒 Authentication
+Des notifications sont envoyées à `HOTEL_EMAIL` lors d'une réservation, d'un
+message de contact et d'une demande de devis (le demandeur reçoit en plus un
+accusé de réception). Le champ `Reply-To` pointe vers le client, pour pouvoir
+répondre directement.
 
-Admin endpoints use JWT authentication. Include the token in the Authorization header:
+Sans `RESEND_API_KEY`, l'envoi est ignoré avec un avertissement dans la console :
+la réservation ou le message est tout de même enregistré.
 
-```
-Authorization: Bearer <your-jwt-token>
-```
+---
 
-## 🚢 Deployment
-
-### Build for Production
+## Production
 
 ```bash
 npm run build
+NODE_ENV=production npm start
 ```
 
-### Run Production Server
+À définir impérativement : `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`,
+`NODE_ENV=production`. En production, les détails techniques des erreurs ne sont
+plus renvoyés au client.
 
-```bash
-npm start
-```
+---
 
-### Environment Variables for Production
+## Dépannage
 
-Make sure to set these in your production environment:
+**`ER_ACCESS_DENIED_ERROR` au démarrage** — l'utilisateur ou le mot de passe de
+`DATABASE_URL` ne correspond pas au serveur MySQL. Pour un mot de passe vide,
+garder les deux-points : `mysql://root:@127.0.0.1:3306/royal_palace`.
 
-- `DATABASE_URL` - MySQL connection string (`mysql://user:password@host:3306/royal_palace`)
-- `JWT_SECRET` - A secure random string (use a different value than dev)
-- `RESEND_API_KEY` - Your Resend API key
-- `FROM_EMAIL` - Verified sender email in Resend
-- `NODE_ENV=production`
-- `PORT` - Port number (default: 4000)
+**`EADDRINUSE: port 4000`** — une autre instance tourne déjà. La trouver avec
+`Get-NetTCPConnection -LocalPort 4000 -State Listen` (PowerShell), ou changer
+`PORT`.
 
-## 🐛 Troubleshooting
+**Erreur CORS depuis le front** — ajouter l'origine à `CORS_ORIGIN`.
+Le front doit pointer vers l'API via `VITE_API_URL=http://localhost:4000/api`.
 
-### Database Connection Issues
-
-- Ensure your `DATABASE_URL` uses the `mysql://` protocol and points to an active MySQL 8 server
-- Confirm the database and user in the connection URL exist and have access to the schema
-- For Docker, check the service with `docker compose ps` and review logs with `docker compose logs mysql`
-
-### Email Not Sending
-
-- Verify your `RESEND_API_KEY` is valid
-- Ensure `FROM_EMAIL` is verified in your Resend account
-- Check Resend dashboard for email logs
-
-### CORS Errors
-
-- Update the CORS origin in `src/server.ts` to include your frontend domain
-- For local development, ensure Vite dev server is on port 5173 or 3000
-
-## 📝 Development Notes
-
-- The API uses Zod for request validation
-- All endpoints return JSON responses
-- Errors include detailed messages in development mode
-- SQL statements use parameterized values
-
-## 🤝 Connecting to Frontend
-
-The frontend should be configured with:
-
-```env
-VITE_API_URL=http://localhost:4000/api
-```
-
-For production, update this to your backend API URL.
-
-## 📄 License
-
-ISC
+**`401` sur un endpoint public** — vérifier qu'aucun routeur n'a été monté sur
+`/api` seul dans `src/server.ts`.

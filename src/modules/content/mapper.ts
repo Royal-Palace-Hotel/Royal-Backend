@@ -1,5 +1,7 @@
 import {
+  DiscoverItemRow,
   EventRoomRow,
+  GalleryImageRow,
   MenuItemRow,
   MenuSectionRow,
   RoomAmenityRow,
@@ -91,7 +93,39 @@ export function mapSpaTreatment(row: SpaTreatmentRow) {
     id: row.id,
     key: row.key,
     durationKey: row.duration_key,
+    name: row.name,
+    nameEn: row.name_en,
+    duration: row.duration,
+    durationEn: row.duration_en,
+    description: row.description,
+    descriptionEn: row.description_en,
     price: row.price,
+    order: row.sort_order,
+  }
+}
+
+export function mapGalleryImage(row: GalleryImageRow) {
+  return {
+    id: row.id,
+    src: row.src,
+    alt: row.alt,
+    altEn: row.alt_en,
+    category: row.category,
+    order: row.sort_order,
+  }
+}
+
+export function mapDiscoverItem(row: DiscoverItemRow) {
+  return {
+    id: row.id,
+    type: row.type,
+    key: row.key,
+    title: row.title,
+    titleEn: row.title_en,
+    text: row.text,
+    textEn: row.text_en,
+    icon: row.icon,
+    image: row.image,
     order: row.sort_order,
   }
 }

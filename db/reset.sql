@@ -1,6 +1,9 @@
 USE royal_palace;
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS admin_audit_log;
 DROP TABLE IF EXISTS admin_users;
+DROP TABLE IF EXISTS discover_items;
+DROP TABLE IF EXISTS gallery_images;
 DROP TABLE IF EXISTS newsletter_subscribers;
 DROP TABLE IF EXISTS contact_messages;
 DROP TABLE IF EXISTS event_rooms;

@@ -1,12 +1,16 @@
 import pool from '../../config/db'
 import {
+  DiscoverItemRow,
   EventRoomRow,
+  GalleryImageRow,
   RoomAmenityRow,
   RoomImageRow,
   RoomRow,
   SpaTreatmentRow,
 } from '../../types/database'
-import { mapEventRoom, mapRoom, mapSpaTreatment } from './mapper'
+import {
+  mapDiscoverItem, mapEventRoom, mapGalleryImage, mapRoom, mapSpaTreatment,
+} from './mapper'
 import { getRestaurantMenu } from '../restaurant/service'
 
 export async function getRooms() {
@@ -46,9 +50,31 @@ export const getMenu = getRestaurantMenu
 
 export async function getSpaTreatments() {
   const [rows] = await pool.execute<SpaTreatmentRow[]>(
-    'SELECT id, `key`, duration_key, price, sort_order FROM spa_treatments ORDER BY sort_order ASC',
+    `SELECT id, \`key\`, duration_key, name, name_en, duration, duration_en,
+     description, description_en, price, is_active, sort_order
+     FROM spa_treatments WHERE is_active = 1 ORDER BY sort_order ASC`,
   )
   return rows.map(mapSpaTreatment)
+}
+
+export async function getGallery() {
+  const [rows] = await pool.execute<GalleryImageRow[]>(
+    'SELECT id, src, alt, alt_en, category, sort_order FROM gallery_images ORDER BY category, sort_order',
+  )
+  return rows.map(mapGalleryImage)
+}
+
+export async function getDiscover() {
+  const [rows] = await pool.execute<DiscoverItemRow[]>(
+    `SELECT id, type, \`key\`, title, title_en, text, text_en, icon, image, sort_order
+     FROM discover_items ORDER BY type, sort_order`,
+  )
+  // Le front affiche les activités en encadrés et les attractions en liste :
+  // la réponse les sépare pour éviter un filtrage côté client.
+  return {
+    activities: rows.filter(row => row.type === 'activity').map(mapDiscoverItem),
+    attractions: rows.filter(row => row.type === 'attraction').map(mapDiscoverItem),
+  }
 }
 
 export async function getEventRooms() {

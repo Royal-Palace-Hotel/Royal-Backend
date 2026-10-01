@@ -3,48 +3,53 @@ import { randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import pool from '../../config/db'
+import { ADMIN_INVITE_CODE, JWT_EXPIRES_IN, JWT_SECRET } from '../../config/env'
 import { AdminUserRow } from '../../types/database'
 import { AppError } from '../../middleware/errorHandler'
+import { recordAudit } from '../admin/audit'
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key'
+const ADMIN_FIELDS = 'id, email, password, name, role, is_active, created_at, updated_at'
+
+function issueToken(user: Pick<AdminUserRow, 'id' | 'email' | 'role'>) {
+  return jwt.sign(
+    { userId: user.id, email: user.email, role: user.role },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions,
+  )
+}
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
-    const { email, password } = req.body
+    const email = String(req.body.email).trim().toLowerCase()
+    const { password } = req.body
 
-    // Find user
     const [users] = await pool.execute<AdminUserRow[]>(
-      'SELECT id, email, password, role, created_at, updated_at FROM admin_users WHERE email = ? LIMIT 1',
+      `SELECT ${ADMIN_FIELDS} FROM admin_users WHERE email = ? LIMIT 1`,
       [email],
     )
     const user = users[0]
 
-    if (!user) {
+    // Same message either way, so the response cannot be used to enumerate accounts.
+    if (!user || !(await bcrypt.compare(password, user.password))) {
       throw new AppError('Invalid credentials', 401)
     }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password)
-    if (!isValidPassword) {
-      throw new AppError('Invalid credentials', 401)
+    // A deactivated account keeps its password but can no longer sign in.
+    if (user.is_active === 0) {
+      throw new AppError('This account has been deactivated', 403)
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
+    await pool.execute('UPDATE admin_users SET last_login_at = NOW() WHERE id = ?', [user.id])
+    await recordAudit(
+      { ...req, user: { userId: user.id, email: user.email, role: user.role } } as Request,
+      'login', 'account', user.id, null,
     )
 
     res.json({
       message: 'Login successful',
       data: {
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-        },
+        token: issueToken(user),
+        user: { id: user.id, email: user.email, role: user.role },
       },
     })
   } catch (error) {
@@ -54,55 +59,32 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
-    const { email, password, role, adminInviteCode } = req.body
+    const email = String(req.body.email).trim().toLowerCase()
+    const { password, role, adminInviteCode } = req.body
 
-    // Verify admin invite code
-    const validInviteCode = process.env.ADMIN_INVITE_CODE
-    if (!validInviteCode || adminInviteCode !== validInviteCode) {
+    if (!ADMIN_INVITE_CODE || adminInviteCode !== ADMIN_INVITE_CODE) {
       throw new AppError('Invalid admin invite code', 403)
     }
 
-    // Check if user already exists
-    const [existingUsers] = await pool.execute<AdminUserRow[]>(
-      'SELECT id, email, password, role, created_at, updated_at FROM admin_users WHERE email = ? LIMIT 1',
+    const [existing] = await pool.execute<AdminUserRow[]>(
+      'SELECT id FROM admin_users WHERE email = ? LIMIT 1',
       [email],
     )
-
-    if (existingUsers.length > 0) {
+    if (existing.length > 0) {
       throw new AppError('User already exists', 409)
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Create user
     const id = randomUUID()
     await pool.execute(
       'INSERT INTO admin_users (id, email, password, role) VALUES (?, ?, ?, ?)',
-      [id, email, hashedPassword, role],
-    )
-    const [users] = await pool.execute<AdminUserRow[]>(
-      'SELECT id, email, password, role, created_at, updated_at FROM admin_users WHERE id = ? LIMIT 1',
-      [id],
-    )
-    const user = users[0]
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
+      [id, email, await bcrypt.hash(password, 10), role],
     )
 
     res.status(201).json({
       message: 'User registered successfully',
       data: {
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-        },
+        token: issueToken({ id, email, role }),
+        user: { id, email, role },
       },
     })
   } catch (error) {
@@ -110,32 +92,28 @@ export async function register(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-export function authenticate(req: Request, res: Response, next: NextFunction) {
+export async function me(req: Request, res: Response, next: NextFunction) {
   try {
-    const authHeader = req.headers.authorization
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new AppError('Authentication required', 401)
-    }
+    const [users] = await pool.execute<AdminUserRow[]>(
+      'SELECT id, email, name, role, is_active, last_login_at FROM admin_users WHERE id = ? LIMIT 1',
+      [req.user!.userId],
+    )
+    const user = users[0]
+    if (!user) throw new AppError('Account no longer exists', 401)
+    if (user.is_active === 0) throw new AppError('This account has been deactivated', 403)
 
-    const token = authHeader.substring(7)
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; email: string; role: string }
-
-    req.user = decoded
-    next()
+    res.json({
+      data: {
+        user: {
+          userId: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          lastLoginAt: user.last_login_at,
+        },
+      },
+    })
   } catch (error) {
-    next(new AppError('Invalid or expired token', 401))
-  }
-}
-
-// Extend Express Request type
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        userId: string
-        email: string
-        role: string
-      }
-    }
+    next(error)
   }
 }

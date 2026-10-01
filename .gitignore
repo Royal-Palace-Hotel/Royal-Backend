@@ -11,6 +11,9 @@ yarn.lock
 dist/
 build/
 
+# Images envoyées depuis le back-office
+uploads/
+
 # Prisma
 prisma/migrations/
 

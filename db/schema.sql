@@ -86,12 +86,51 @@ CREATE TABLE IF NOT EXISTS spa_treatments (
   id VARCHAR(191) NOT NULL,
   `key` VARCHAR(191) NOT NULL,
   duration_key VARCHAR(191) NOT NULL,
+  name VARCHAR(191) NULL,
+  name_en VARCHAR(191) NULL,
+  duration VARCHAR(191) NULL,
+  duration_en VARCHAR(191) NULL,
+  description TEXT NULL,
+  description_en TEXT NULL,
   price DECIMAL(10, 2) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
   sort_order INT NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY spa_treatments_key_unique (`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS gallery_images (
+  id VARCHAR(191) NOT NULL,
+  src VARCHAR(1024) NOT NULL,
+  alt VARCHAR(500) NOT NULL,
+  alt_en VARCHAR(500) NULL,
+  category ENUM('hero', 'rooms', 'restaurant', 'pool', 'spa', 'events', 'discover', 'gallery') NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY gallery_images_category_idx (category, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- `activity` = encadré illustré ; `attraction` = simple ligne de la liste « à proximité ».
+CREATE TABLE IF NOT EXISTS discover_items (
+  id VARCHAR(191) NOT NULL,
+  type ENUM('activity', 'attraction') NOT NULL DEFAULT 'activity',
+  `key` VARCHAR(191) NULL,
+  title VARCHAR(191) NULL,
+  title_en VARCHAR(191) NULL,
+  text TEXT NULL,
+  text_en TEXT NULL,
+  icon VARCHAR(64) NULL,
+  image VARCHAR(1024) NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY discover_items_key_unique (`key`),
+  KEY discover_items_type_idx (type, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS event_rooms (
@@ -141,9 +180,29 @@ CREATE TABLE IF NOT EXISTS admin_users (
   id VARCHAR(191) NOT NULL,
   email VARCHAR(191) NOT NULL,
   password VARCHAR(255) NOT NULL,
+  name VARCHAR(191) NULL,
   role VARCHAR(32) NOT NULL DEFAULT 'admin',
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  last_login_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY admin_users_email_unique (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Journal des actions d'administration. `user_email` est dupliqué pour que la
+-- trace reste lisible même après la suppression du compte.
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id VARCHAR(191) NOT NULL,
+  user_id VARCHAR(191) NULL,
+  user_email VARCHAR(191) NOT NULL,
+  action VARCHAR(32) NOT NULL,
+  entity VARCHAR(64) NOT NULL,
+  entity_id VARCHAR(191) NULL,
+  summary VARCHAR(500) NULL,
+  ip VARCHAR(64) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY admin_audit_log_created_idx (created_at),
+  KEY admin_audit_log_entity_idx (entity, entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

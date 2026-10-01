@@ -65,8 +65,52 @@ export interface SpaTreatmentRow extends RowDataPacket {
   id: string
   key: string
   duration_key: string
+  name: string | null
+  name_en: string | null
+  duration: string | null
+  duration_en: string | null
+  description: string | null
+  description_en: string | null
   price: number
+  is_active: number
   sort_order: number
+}
+
+export type GalleryCategory =
+  | 'hero' | 'rooms' | 'restaurant' | 'pool' | 'spa' | 'events' | 'discover' | 'gallery'
+
+export interface GalleryImageRow extends RowDataPacket {
+  id: string
+  src: string
+  alt: string
+  alt_en: string | null
+  category: GalleryCategory
+  sort_order: number
+}
+
+export interface DiscoverItemRow extends RowDataPacket {
+  id: string
+  type: 'activity' | 'attraction'
+  key: string | null
+  title: string | null
+  title_en: string | null
+  text: string | null
+  text_en: string | null
+  icon: string | null
+  image: string | null
+  sort_order: number
+}
+
+export interface AuditLogRow extends RowDataPacket {
+  id: string
+  user_id: string | null
+  user_email: string
+  action: string
+  entity: string
+  entity_id: string | null
+  summary: string | null
+  ip: string | null
+  created_at: Date
 }
 
 export interface EventRoomRow extends RowDataPacket {
@@ -108,7 +152,10 @@ export interface AdminUserRow extends RowDataPacket {
   id: string
   email: string
   password: string
+  name: string | null
   role: string
+  is_active: number
+  last_login_at: Date | null
   created_at: Date
   updated_at: Date
 }

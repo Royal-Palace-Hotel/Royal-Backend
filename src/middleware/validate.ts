@@ -1,21 +1,34 @@
 import { Request, Response, NextFunction } from 'express'
-import { ZodSchema, ZodError } from 'zod'
-import { AppError } from './errorHandler'
+import { ZodError, ZodType } from 'zod'
 
-export function validate(schema: ZodSchema, source: 'body' | 'params' | 'query' = 'body') {
+type Source = 'body' | 'params' | 'query'
+
+/**
+ * Validates a request section and writes the parsed value back, so handlers
+ * receive Zod's defaults and coercions rather than the raw payload.
+ */
+export function validate(schema: ZodType, source: Source = 'body') {
   return (req: Request, res: Response, next: NextFunction) => {
-    try {
-      schema.parse(req[source])
-      next()
-    } catch (error) {
-      if (error instanceof ZodError && error.issues) {
-        const errors = error.issues.map(e => ({
-          field: e.path.join('.'),
-          message: e.message,
-        }))
-        return res.status(400).json({ error: 'Validation failed', details: errors })
-      }
-      next(new AppError('Validation failed', 400))
+    const result = schema.safeParse(req[source])
+
+    if (!result.success) {
+      const error: ZodError = result.error
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: error.issues.map(issue => ({
+          field: issue.path.join('.'),
+          message: issue.message,
+        })),
+      })
     }
+
+    if (source === 'query') {
+      // req.query is a getter on some Express versions; mutate in place.
+      Object.assign(req.query, result.data)
+    } else {
+      req[source] = result.data as never
+    }
+
+    next()
   }
 }
