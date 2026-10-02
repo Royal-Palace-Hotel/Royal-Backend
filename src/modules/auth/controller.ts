@@ -1,22 +1,14 @@
 import { Request, Response, NextFunction } from 'express'
 import { randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
 import pool from '../../config/db'
-import { ADMIN_INVITE_CODE, JWT_EXPIRES_IN, JWT_SECRET } from '../../config/env'
+import { ADMIN_INVITE_CODE } from '../../config/env'
 import { AdminUserRow } from '../../types/database'
 import { AppError } from '../../middleware/errorHandler'
 import { recordAudit } from '../admin/audit'
+import { issueToken } from './token'
 
-const ADMIN_FIELDS = 'id, email, password, name, role, is_active, created_at, updated_at'
-
-function issueToken(user: Pick<AdminUserRow, 'id' | 'email' | 'role'>) {
-  return jwt.sign(
-    { userId: user.id, email: user.email, role: user.role },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions,
-  )
-}
+const ADMIN_FIELDS = 'id, email, password, name, role, is_active, token_version, created_at, updated_at'
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {

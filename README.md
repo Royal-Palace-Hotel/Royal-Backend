@@ -67,11 +67,12 @@ Relancer la commande avec une adresse existante réinitialise son mot de passe.
 ## Test global de l'API
 
 `tests/api.test.ts` interroge l'API en HTTP, comme le ferait le front, et
-vérifie 208 points : contenu public, disponibilité, réservations (dont
+vérifie 221 points : contenu public, disponibilité, réservations (dont
 surréservation et concurrence), contact, devis, newsletter, authentification,
 rôles, protection du back-office, CRUD complet (chambres, carte, salles, spa,
 galerie, Découvrir), envoi d'images, tableau de bord, pagination, recherche,
-tri, exports CSV, gestion des comptes et journal des actions.
+tri, exports CSV, gestion des comptes, révocation des jetons et journal des
+actions.
 
 ```bash
 npm run dev        # terminal 1
@@ -168,6 +169,17 @@ l'ensemble de l'hôtel.
 chère pouvant accueillir le groupe et disponible sur la période est attribuée.
 `children` vaut `0` par défaut.
 
+Bornes appliquées à la création (la *consultation* de disponibilité, elle,
+reste ouverte sur n'importe quelle période, y compris passée) :
+
+| Règle | Réponse si enfreinte |
+| --- | --- |
+| Arrivée dans le passé | `400` |
+| Séjour de plus de 90 nuits | `400` |
+| Plus de 10 chambres, ou plus de 40 voyageurs | `400` |
+| Groupe dépassant la capacité de la chambre choisie | `400` |
+| Plus d'unités demandées que disponibles | `409` |
+
 ```json
 {
   "guestName": "Jean Dupont",
@@ -261,6 +273,17 @@ désactiver son propre compte, ni retirer le dernier administrateur actif. Toute
 création, modification, suppression, connexion et export est consignée dans
 `admin_audit_log`.
 
+Un **changement de mot de passe révoque les jetons déjà émis** : le compte porte
+un compteur `token_version`, incrémenté à chaque changement et inscrit dans le
+jeton. Un jeton volé cesse donc d'être valable dès que le mot de passe est
+changé — et une réinitialisation faite par un administrateur déconnecte la
+personne concernée. `PUT /api/admin/account/password` renvoie un jeton neuf,
+pour que la session qui vient de faire le changement ne soit pas coupée.
+
+> Un compteur plutôt qu'un horodatage : `iat` n'a qu'une précision d'une
+> seconde, donc un jeton émis dans la même seconde que le changement serait
+> indistinguable d'un jeton antérieur.
+
 > Toutes les routes d'administration vivent sous `/api/admin`. Aucun routeur ne
 > doit être monté sur `/api` seul : un routeur monté là s'applique à **toutes**
 > les routes `/api/*`, y compris les routes publiques et la connexion.
@@ -331,13 +354,22 @@ commande est sûre à relancer. Les nouvelles *tables* sont créées par
 
 ## E-mails
 
-Des notifications sont envoyées à `HOTEL_EMAIL` lors d'une réservation, d'un
-message de contact et d'une demande de devis (le demandeur reçoit en plus un
-accusé de réception). Le champ `Reply-To` pointe vers le client, pour pouvoir
-répondre directement.
+| Événement | À l'hôtel | Au client |
+| --- | --- | --- |
+| Réservation | notification complète | accusé de réception avec récapitulatif |
+| Message de contact | notification | — |
+| Demande de devis | notification | accusé de réception |
 
-Sans `RESEND_API_KEY`, l'envoi est ignoré avec un avertissement dans la console :
-la réservation ou le message est tout de même enregistré.
+Le champ `Reply-To` pointe vers le client sur les notifications reçues par
+l'hôtel, pour pouvoir répondre directement depuis sa boîte mail.
+
+L'accusé de réception d'une réservation reste prudent dans sa formulation : la
+réservation arrive en statut « en attente » et n'est confirmée qu'une fois
+validée au back-office.
+
+> Sans `RESEND_API_KEY`, **aucun e-mail ne part** : l'envoi est ignoré avec un
+> avertissement dans la console, et la réservation ou le message est tout de
+> même enregistré. Renseigne la clé pour que l'hôtel soit réellement notifié.
 
 ---
 

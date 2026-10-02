@@ -9,6 +9,8 @@ export interface AuthUser {
   userId: string
   email: string
   role: string
+  /** Version de mot de passe à l'émission du jeton. */
+  tv?: number
 }
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -44,12 +46,20 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
 export async function ensureActiveUser(req: Request, res: Response, next: NextFunction) {
   try {
     const [rows] = await pool.execute<AdminUserRow[]>(
-      'SELECT id, role, is_active FROM admin_users WHERE id = ? LIMIT 1',
+      'SELECT id, role, is_active, token_version FROM admin_users WHERE id = ? LIMIT 1',
       [req.user!.userId],
     )
     const user = rows[0]
     if (!user) return next(new AppError('Account no longer exists', 401))
     if (user.is_active === 0) return next(new AppError('This account has been deactivated', 403))
+
+    // Un changement de mot de passe incrémente `token_version` : les jetons
+    // portant la version précédente cessent d'être acceptés. Sans cela, un
+    // jeton volé resterait valable malgré le changement. Les jetons émis avant
+    // l'introduction du champ n'ont pas de `tv` et valent donc 0.
+    if ((req.user!.tv ?? 0) !== Number(user.token_version ?? 0)) {
+      return next(new AppError('Password changed, please sign in again', 401))
+    }
 
     // Le rôle de la base prime sur celui du jeton : une rétrogradation
     // s'applique immédiatement.

@@ -325,10 +325,11 @@ async function testBookings() {
   const rooms = await call('GET', '/content/rooms')
   const slug = rooms.body?.data?.[0]?.slug
 
+  // La chambre la moins chère accueille 2 personnes : on reste dans sa capacité.
   const withRoom = await call('POST', '/bookings', {
     body: {
       guestName: 'Test Chambre', guestEmail: mail('reservation'), guestPhone: '+261 34 00 000 00',
-      checkIn: '2030-02-01', checkOut: '2030-02-04', rooms: 1, adults: 2, children: 1, roomId: slug,
+      checkIn: '2030-02-01', checkOut: '2030-02-04', rooms: 1, adults: 1, children: 1, roomId: slug,
     },
   })
   const booking = withRoom.body?.data
@@ -367,13 +368,25 @@ async function testBookings() {
   check('les nombres envoyés en chaîne sont convertis',
     coerced.status === 201 && coerced.body?.data?.adults === 2, coerced)
 
-  const tooMany = await call('POST', '/bookings', {
-    body: {
-      guestName: 'Test Survente', guestEmail: mail('survente'),
-      checkIn: '2030-02-01', checkOut: '2030-02-04', rooms: 999, adults: 1, children: 0, roomId: slug,
-    },
+  // Surréservation : on demande plus d'unités que la chambre n'en possède,
+  // tout en restant sous le plafond de 10 chambres par réservation. Le nombre
+  // d'unités n'est pas exposé publiquement, on le lit via la disponibilité.
+  const capacity = await call('POST', '/bookings/availability', {
+    body: { checkIn: '2030-02-01', checkOut: '2030-02-04', rooms: 1, roomId: slug },
   })
-  check('surréservation rejetée en 409', tooMany.status === 409, tooMany)
+  const totalRooms = capacity.body?.totalRooms
+  if (typeof totalRooms === 'number' && totalRooms < 10) {
+    const tooMany = await call('POST', '/bookings', {
+      body: {
+        guestName: 'Test Survente', guestEmail: mail('survente'),
+        checkIn: '2030-02-01', checkOut: '2030-02-04',
+        rooms: totalRooms + 1, adults: 1, children: 0, roomId: slug,
+      },
+    })
+    check('surréservation rejetée en 409', tooMany.status === 409, tooMany)
+  } else {
+    note(`chambre à ${totalRooms} unités : test de surréservation ignoré (plafond à 10)`)
+  }
 
   const invalid = await call('POST', '/bookings', { body: { guestName: 'x' } })
   check('payload invalide rejeté en 400 avec le détail des champs',
@@ -386,6 +399,66 @@ async function testBookings() {
     },
   })
   check('adresse e-mail invalide rejetée en 400', badEmail.status === 400, badEmail)
+
+  section('Réservations — bornes de bon sens')
+
+  const past = await call('POST', '/bookings', {
+    body: {
+      guestName: 'Test Passe', guestEmail: mail('passe'),
+      checkIn: '2020-01-01', checkOut: '2020-01-03', rooms: 1, adults: 1, roomId: slug,
+    },
+  })
+  check('une arrivée dans le passé est refusée en 400', past.status === 400, past)
+
+  const tooLong = await call('POST', '/bookings', {
+    body: {
+      guestName: 'Test Long', guestEmail: mail('long'),
+      checkIn: '2030-01-01', checkOut: '2030-12-31', rooms: 1, adults: 1, roomId: slug,
+    },
+  })
+  check('un séjour de plus de 90 nuits est refusé en 400', tooLong.status === 400, tooLong)
+
+  const tooManyRooms = await call('POST', '/bookings', {
+    body: {
+      guestName: 'Test Rooms', guestEmail: mail('rooms'),
+      checkIn: '2030-09-01', checkOut: '2030-09-02', rooms: 50, adults: 1, roomId: slug,
+    },
+  })
+  check('plus de 10 chambres en une réservation est refusé en 400', tooManyRooms.status === 400, tooManyRooms)
+
+  // Capacité : une chambre de N personnes ne peut pas accueillir plus.
+  const rooms2 = await call('GET', '/content/rooms')
+  const smallest = (rooms2.body?.data ?? [])
+    .slice()
+    .sort((a: any, b: any) => a.maxGuests - b.maxGuests)[0]
+  if (smallest) {
+    const overCapacity = await call('POST', '/bookings', {
+      body: {
+        guestName: 'Test Capacite', guestEmail: mail('capacite'),
+        checkIn: '2030-09-10', checkOut: '2030-09-12',
+        rooms: 1, adults: smallest.maxGuests + 3, children: 0, roomId: smallest.slug,
+      },
+    })
+    check('un groupe trop grand pour la chambre choisie est refusé en 400',
+      overCapacity.status === 400, overCapacity)
+
+    const exactCapacity = await call('POST', '/bookings', {
+      body: {
+        guestName: 'Test Capacite OK', guestEmail: mail('capaciteok'),
+        checkIn: '2030-09-10', checkOut: '2030-09-12',
+        rooms: 1, adults: smallest.maxGuests, children: 0, roomId: smallest.slug,
+      },
+    })
+    check('  un groupe pile à la capacité passe', exactCapacity.status === 201, exactCapacity)
+  }
+
+  // La disponibilité reste consultable sur une période passée : c'est une
+  // lecture, elle n'engage rien.
+  const pastAvailability = await call('POST', '/bookings/availability', {
+    body: { checkIn: '2020-01-01', checkOut: '2020-01-03', rooms: 1 },
+  })
+  check('la disponibilité reste consultable sur une période passée',
+    pastAvailability.status === 200, pastAvailability)
 }
 
 /* ------------------------------------------------------------------ */
@@ -902,6 +975,9 @@ async function testStats() {
   check('  compteurs de réservations',
     isNumber(stats.bookings?.total) && isNumber(stats.bookings?.pending) &&
     isNumber(stats.bookings?.confirmed) && isNumber(stats.bookings?.upcomingArrivals), stats.bookings)
+  check('  vue du jour : arrivées, départs, chambres occupées',
+    isNumber(stats.today?.arrivals) && isNumber(stats.today?.departures) &&
+    isNumber(stats.today?.roomsOccupied), stats.today)
   check('  occupation : taux entre 0 et 100',
     isNumber(stats.occupancy?.rate) && stats.occupancy.rate >= 0 && stats.occupancy.rate <= 100,
     stats.occupancy)
@@ -1296,6 +1372,53 @@ async function testUsersAndRoles() {
     auth: true, body: { currentPassword: ADMIN_PASSWORD, newPassword: 'court' },
   })
   check('un nouveau mot de passe trop court est refusé (400)', shortNew.status === 400, shortNew)
+
+  // Révocation des jetons au changement de mot de passe. On opère sur un
+  // compte jetable : le compte d'administration principal n'est jamais touché.
+  const victimEmail = mail('rotation')
+  const firstPassword = 'motdepasse-rotation-1'
+  const secondPassword = 'motdepasse-rotation-2'
+  const victim = await call('POST', '/admin/users', {
+    auth: true, body: { email: victimEmail, password: firstPassword, role: 'staff' },
+  })
+  if (victim.body?.data?.id) {
+    created.users.push(victim.body.data.id)
+
+    const session = await call('POST', '/auth/login', {
+      body: { email: victimEmail, password: firstPassword },
+    })
+    const oldToken = session.body?.data?.token
+    check('connexion du compte jetable', session.status === 200 && !!oldToken, session)
+
+    const changed = await call('PUT', '/admin/account/password', {
+      bearer: oldToken,
+      body: { currentPassword: firstPassword, newPassword: secondPassword },
+    })
+    const newToken = changed.body?.data?.token
+    check('le changement de mot de passe renvoie un jeton neuf',
+      changed.status === 200 && !!newToken && newToken !== oldToken, changed)
+
+    const withOld = await call('GET', '/admin/rooms', { bearer: oldToken })
+    check('  l’ancien jeton est révoqué (401)', withOld.status === 401, withOld)
+
+    const withNew = await call('GET', '/admin/rooms', { bearer: newToken })
+    check('  le nouveau jeton fonctionne', withNew.status === 200, withNew)
+
+    const reused = await call('PUT', '/admin/account/password', {
+      bearer: newToken,
+      body: { currentPassword: secondPassword, newPassword: secondPassword },
+    })
+    check('réutiliser le même mot de passe est refusé en 400', reused.status === 400, reused)
+
+    // Une réinitialisation par un administrateur doit aussi couper les sessions.
+    const reset = await call('PUT', `/admin/users/${victim.body.data.id}`, {
+      auth: true, body: { password: 'motdepasse-rotation-3' },
+    })
+    check('un administrateur peut réinitialiser un mot de passe', reset.status === 200, reset)
+
+    const afterReset = await call('GET', '/admin/rooms', { bearer: newToken })
+    check('  la session de la personne concernée est coupée (401)', afterReset.status === 401, afterReset)
+  }
 
   const audit = await call('GET', '/admin/audit-log?limit=50', { auth: true })
   check('GET /admin/audit-log', audit.status === 200 && isArray(audit.body?.data), audit)

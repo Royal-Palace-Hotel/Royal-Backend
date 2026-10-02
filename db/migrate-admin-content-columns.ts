@@ -44,6 +44,7 @@ const schemaUpdates: Record<string, Array<readonly [string, string]>> = {
     ['name', 'VARCHAR(191) NULL'],
     ['is_active', 'TINYINT(1) NOT NULL DEFAULT 1'],
     ['last_login_at', 'DATETIME NULL'],
+    ['token_version', 'INT NOT NULL DEFAULT 0'],
   ],
 }
 

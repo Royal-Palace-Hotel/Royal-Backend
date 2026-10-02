@@ -4,6 +4,7 @@ import { ResultSetHeader } from 'mysql2/promise'
 import pool from '../../config/db'
 import { AppError } from '../../middleware/errorHandler'
 import { AdminUserRow } from '../../types/database'
+import { issueToken } from '../auth/token'
 
 const PUBLIC_FIELDS = `id, email, name, role, is_active AS isActive,
   last_login_at AS lastLoginAt, created_at AS createdAt`
@@ -70,7 +71,11 @@ export async function updateAdminUser(id: string, input: {
   if (input.name !== undefined) { sets.push('name = ?'); values.push(input.name || null) }
   if (input.role !== undefined) { sets.push('role = ?'); values.push(input.role) }
   if (input.isActive !== undefined) { sets.push('is_active = ?'); values.push(input.isActive ? 1 : 0) }
-  if (input.password) { sets.push('password = ?'); values.push(await bcrypt.hash(input.password, 10)) }
+  if (input.password) {
+    // Réinitialiser le mot de passe de quelqu'un déconnecte ses sessions.
+    sets.push('password = ?', 'token_version = token_version + 1')
+    values.push(await bcrypt.hash(input.password, 10))
+  }
 
   if (sets.length) {
     await pool.execute(`UPDATE admin_users SET ${sets.join(', ')} WHERE id = ?`, [...values, id])
@@ -99,9 +104,17 @@ async function assertAnotherActiveAdminExists(excludedId: string) {
   }
 }
 
+/**
+ * Change son propre mot de passe.
+ *
+ * L'incrément de `token_version` révoque tous les jetons déjà émis : les
+ * autres sessions sont déconnectées. Un jeton neuf, portant la nouvelle
+ * version, est renvoyé pour que la session courante ne soit pas coupée.
+ */
 export async function changeOwnPassword(userId: string, currentPassword: string, newPassword: string) {
   const [rows] = await pool.execute<AdminUserRow[]>(
-    'SELECT id, password FROM admin_users WHERE id = ? LIMIT 1', [userId],
+    'SELECT id, email, password, role, token_version FROM admin_users WHERE id = ? LIMIT 1',
+    [userId],
   )
   const user = rows[0]
   if (!user) throw new AppError('Compte introuvable', 404)
@@ -109,9 +122,17 @@ export async function changeOwnPassword(userId: string, currentPassword: string,
   if (!(await bcrypt.compare(currentPassword, user.password))) {
     throw new AppError('Mot de passe actuel incorrect', 400)
   }
+  if (await bcrypt.compare(newPassword, user.password)) {
+    throw new AppError('Le nouveau mot de passe doit être différent de l’actuel', 400)
+  }
+
   await pool.execute(
-    'UPDATE admin_users SET password = ? WHERE id = ?',
+    'UPDATE admin_users SET password = ?, token_version = token_version + 1 WHERE id = ?',
     [await bcrypt.hash(newPassword, 10), userId],
   )
-  return { id: userId }
+
+  return {
+    id: userId,
+    token: issueToken({ ...user, token_version: Number(user.token_version ?? 0) + 1 }),
+  }
 }

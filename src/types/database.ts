@@ -156,6 +156,7 @@ export interface AdminUserRow extends RowDataPacket {
   role: string
   is_active: number
   last_login_at: Date | null
+  token_version: number
   created_at: Date
   updated_at: Date
 }

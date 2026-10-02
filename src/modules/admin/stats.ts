@@ -26,10 +26,13 @@ export async function getDashboardStats() {
 
   const ACTIVE = "status IN ('pending', 'confirmed')"
 
+  const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000)
+
   const [
     totalBookings, pendingBookings, confirmedBookings, cancelledBookings,
     bookingsThisMonth, newMessages, totalMessages, subscribers,
     roomsCount, upcomingArrivals,
+    arrivalsToday, departuresToday, inHouse,
   ] = await Promise.all([
     count('SELECT COUNT(*) AS n FROM bookings'),
     count("SELECT COUNT(*) AS n FROM bookings WHERE status = 'pending'"),
@@ -43,6 +46,13 @@ export async function getDashboardStats() {
     count('SELECT COALESCE(SUM(total_units), 0) AS n FROM rooms'),
     count(`SELECT COUNT(*) AS n FROM bookings WHERE ${ACTIVE} AND check_in >= ? AND check_in < ?`,
       [today, in30Days]),
+    // Vue du jour pour la réception : qui arrive, qui part, qui est sur place.
+    count(`SELECT COUNT(*) AS n FROM bookings WHERE ${ACTIVE} AND check_in >= ? AND check_in < ?`,
+      [today, tomorrow]),
+    count(`SELECT COUNT(*) AS n FROM bookings WHERE ${ACTIVE} AND check_out >= ? AND check_out < ?`,
+      [today, tomorrow]),
+    count(`SELECT COALESCE(SUM(rooms_count), 0) AS n FROM bookings
+           WHERE ${ACTIVE} AND check_in <= ? AND check_out > ?`, [today, today]),
   ])
 
   // Nuitées vendues sur le mois en cours : on borne chaque séjour au mois.
@@ -111,6 +121,7 @@ export async function getDashboardStats() {
       thisMonth: bookingsThisMonth,
       upcomingArrivals,
     },
+    today: { arrivals: arrivalsToday, departures: departuresToday, roomsOccupied: inHouse },
     occupancy: {
       nightsSold,
       capacity,

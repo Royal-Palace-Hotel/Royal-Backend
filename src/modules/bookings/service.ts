@@ -9,7 +9,7 @@ import {
   RoomRow,
 } from '../../types/database'
 import { mapRoom } from '../content/mapper'
-import { sendBookingEmail } from '../../utils/email'
+import { sendBookingConfirmationToGuest, sendBookingEmail } from '../../utils/email'
 
 interface RoomAggregateRow extends RowDataPacket {
   total_rooms: number | string
@@ -159,6 +159,20 @@ export async function createBooking(input: {
       candidates = all
     }
 
+    // Une chambre choisie explicitement doit pouvoir accueillir le groupe :
+    // sans ce contrôle, on pouvait réserver une chambre de 2 pour 10 personnes.
+    const guests = input.adults + input.children
+    if (input.roomId) {
+      const capacity = candidates[0].max_guests * input.rooms
+      if (guests > capacity) {
+        throw new AppError(
+          `Cette chambre accueille ${candidates[0].max_guests} personne(s) ; `
+          + `${input.rooms} chambre(s) ne suffisent pas pour ${guests} voyageur(s).`,
+          400,
+        )
+      }
+    }
+
     let room: RoomRow | undefined
     let availableRooms = 0
     for (const candidate of candidates) {
@@ -219,6 +233,11 @@ export async function createBooking(input: {
     connection.release()
   }
 
-  await sendBookingEmail(booking)
+  // Les envois ne doivent pas faire échouer une réservation déjà enregistrée :
+  // `send` avale ses propres erreurs, et on n'attend pas l'un pour l'autre.
+  await Promise.all([
+    sendBookingEmail(booking),
+    sendBookingConfirmationToGuest(booking),
+  ])
   return booking
 }

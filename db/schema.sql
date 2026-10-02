@@ -184,6 +184,11 @@ CREATE TABLE IF NOT EXISTS admin_users (
   role VARCHAR(32) NOT NULL DEFAULT 'admin',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   last_login_at DATETIME NULL,
+  -- Incrémenté à chaque changement de mot de passe : invalide les jetons
+  -- portant une version antérieure. Un compteur plutôt qu'un horodatage, car
+  -- `iat` n'a qu'une précision d'une seconde — un jeton émis dans la même
+  -- seconde que le changement ne serait pas distinguable.
+  token_version INT NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),

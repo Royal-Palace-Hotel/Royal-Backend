@@ -51,6 +51,41 @@ export async function sendBookingEmail(booking: any) {
   })
 }
 
+/**
+ * Accusé de réception au client.
+ *
+ * Le libellé reste prudent : la réservation arrive en statut « en attente »,
+ * elle n'est pas confirmée tant que l'hôtel ne l'a pas validée au back-office.
+ */
+export async function sendBookingConfirmationToGuest(booking: any) {
+  const roomName = booking.room?.name || booking.room?.slug || booking.roomId
+  const nights = Math.max(Math.round(
+    (new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / 86400000,
+  ), 1)
+
+  await send('Booking (guest)', {
+    from: FROM_EMAIL,
+    to: booking.guestEmail,
+    replyTo: HOTEL_EMAIL,
+    subject: 'Nous avons bien reçu votre demande de réservation',
+    html: `
+      <p>Bonjour ${esc(booking.guestName)},</p>
+      <p>Merci d'avoir choisi le Royal Palace Antsirabe. Votre demande nous est
+      bien parvenue ; notre équipe la confirme sous peu par retour d'e-mail.</p>
+      <p><strong>Récapitulatif :</strong><br>
+      Chambre : ${esc(roomName)}<br>
+      Arrivée : ${date(booking.checkIn)}<br>
+      Départ : ${date(booking.checkOut)}<br>
+      Durée : ${nights} nuit(s)<br>
+      Chambres : ${esc(booking.rooms)}<br>
+      Voyageurs : ${esc(booking.adults)} adulte(s)${booking.children ? `, ${esc(booking.children)} enfant(s)` : ''}<br>
+      Référence : ${esc(booking.id)}</p>
+      <p>Pour toute question, répondez simplement à ce message.</p>
+      <p>Cordialement,<br>L'équipe Royal Palace Antsirabe</p>
+    `,
+  })
+}
+
 export async function sendContactEmail(contact: any) {
   await send('Contact', {
     from: FROM_EMAIL,
