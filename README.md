@@ -8,7 +8,7 @@ formulaires de contact, newsletter et back-office d'administration.
 - **Base de données** : MySQL 8 (via `mysql2/promise`)
 - **Validation** : Zod
 - **Authentification** : JWT + bcrypt
-- **E-mails** : Resend (optionnel)
+- **E-mails** : SMTP Gmail via Nodemailer (optionnel)
 
 ---
 
@@ -119,8 +119,9 @@ explicitement en fin de rapport plutôt que de laisser croire à une régression
 | `JWT_SECRET` | en production | Signature des jetons. En développement, une valeur de repli est utilisée. |
 | `JWT_EXPIRES_IN` | non | Durée de validité du jeton (défaut `7d`) |
 | `ADMIN_INVITE_CODE` | non | Vide ⇒ `POST /api/auth/register` est désactivé |
-| `RESEND_API_KEY` | non | Vide ⇒ les e-mails sont ignorés sans faire échouer la requête |
-| `FROM_EMAIL` | non | Expéditeur vérifié chez Resend |
+| `GMAIL_USER` | non | Boîte Gmail de l'hôtel. Vide ⇒ les e-mails sont ignorés sans faire échouer la requête |
+| `GMAIL_APP_PASSWORD` | non | Mot de passe d'application à 16 caractères, pas celui du compte |
+| `FROM_NAME` | non | Nom affiché comme expéditeur (défaut `Royal Palace Antsirabe`) |
 | `HOTEL_EMAIL` | non | Destinataire des notifications (défaut `royalpalace.resa@moov.mg`) |
 | `PORT` | non | Défaut `4000` |
 | `NODE_ENV` | non | `development` ou `production` |
@@ -319,7 +320,7 @@ Royal-Backend/
 │   │   ├── auth/                       # Connexion et inscription
 │   │   └── admin/                      # CRUD du back-office
 │   ├── types/database.ts               # Interfaces des lignes SQL
-│   └── utils/email.ts                  # Envoi via Resend
+│   └── utils/email.ts                  # Envoi via le SMTP de Gmail
 ├── tests/api.test.ts                   # Test global de l'API (npm run test:api)
 ├── uploads/                            # Images envoyées depuis le back-office (hors Git)
 ├── _unused/                            # Anciens fichiers retirés de src/ (voir son README)
@@ -352,11 +353,13 @@ commande est sûre à relancer. Les nouvelles *tables* sont créées par
 
 ---
 
-## E-mails
+## Notifications
 
 | Événement | À l'hôtel | Au client |
 | --- | --- | --- |
-| Réservation | notification complète | accusé de réception avec récapitulatif |
+| Réservation reçue | notification complète | accusé de réception avec récapitulatif (e-mail) |
+| Réservation **confirmée** au back-office | — | e-mail de confirmation |
+| Réservation **annulée** au back-office | — | e-mail d'annulation |
 | Message de contact | notification | — |
 | Demande de devis | notification | accusé de réception |
 
@@ -367,9 +370,53 @@ L'accusé de réception d'une réservation reste prudent dans sa formulation : l
 réservation arrive en statut « en attente » et n'est confirmée qu'une fois
 validée au back-office.
 
-> Sans `RESEND_API_KEY`, **aucun e-mail ne part** : l'envoi est ignoré avec un
-> avertissement dans la console, et la réservation ou le message est tout de
-> même enregistré. Renseigne la clé pour que l'hôtel soit réellement notifié.
+### Confirmation et annulation
+
+`PATCH /api/admin/bookings/:id` prévient le client **uniquement au véritable
+passage** à `confirmed` ou `cancelled` :
+
+- réappliquer le statut déjà en place (double clic, re-synchro) n'envoie rien ;
+- un retour à `pending` est une correction interne et ne déclenche aucun message.
+
+La réponse indique si l'e-mail est réellement parti, et le back-office l'affiche :
+
+```jsonc
+{ "data": { "id": "…", "status": "confirmed", "notification": "sent" } }
+// "sent"     ⇒ le client a reçu l'e-mail
+// "failed"   ⇒ envoi tenté sans succès : le bandeau invite l'administrateur
+//              à prévenir le client lui-même
+// "not-due"  ⇒ aucun e-mail n'était attendu (statut inchangé, ou retour à pending)
+```
+
+> Sans `GMAIL_USER` / `GMAIL_APP_PASSWORD`, **aucun e-mail ne part** : l'envoi
+> est ignoré avec un avertissement dans la console, et l'opération métier
+> (réservation, changement de statut, message) est tout de même enregistrée. Un
+> envoi n'échoue jamais une requête.
+
+### Configurer l'expéditeur
+
+L'envoi passe par le SMTP de Gmail, gratuit et sans nom de domaine à acheter.
+Sur le compte Gmail de l'hôtel :
+
+1. activer la **validation en deux étapes** — elle conditionne l'étape suivante ;
+2. générer un **mot de passe d'application** sur
+   [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) ;
+3. reporter l'adresse dans `GMAIL_USER` et les 16 caractères dans
+   `GMAIL_APP_PASSWORD`, puis **redémarrer le serveur** : `nodemon` surveille
+   `src/`, pas `.env`, qui n'est lu qu'au démarrage.
+
+Le mot de passe d'application n'est pas celui du compte, et les espaces que
+Google affiche (« abcd efgh ijkl mnop ») sont retirés à la lecture : un
+copier-coller tel quel fonctionne.
+
+Le client voit `FROM_NAME` comme expéditeur, mais l'adresse reste celle de
+`GMAIL_USER` : Gmail refuse d'envoyer depuis une autre adresse que celle
+authentifiée, ou un alias déclaré dans « Envoyer des e-mails en tant que ».
+C'est pourquoi `FROM_EMAIL` est déduit de `GMAIL_USER` plutôt que réglable —
+une valeur divergente donnerait une panne silencieuse.
+
+> Un compte Gmail gratuit plafonne autour de **100 e-mails/jour en SMTP**.
+> Au-delà, il faudra un domaine et un service d'envoi transactionnel.
 
 ---
 

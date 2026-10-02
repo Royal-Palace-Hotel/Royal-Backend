@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import pool from '../../config/db'
 import { AppError } from '../../middleware/errorHandler'
+import { sendBookingDecisionToGuest } from '../../utils/email'
 
 interface AdminRow extends RowDataPacket {
   id: string
@@ -303,9 +304,36 @@ export async function listAllBookings(filters: ListFilters) {
   return rows
 }
 export async function updateBookingStatus(id: string, status: 'pending' | 'confirmed' | 'cancelled') {
-  const [result] = await pool.execute<ResultSetHeader>('UPDATE bookings SET status = ? WHERE id = ?', [status, id])
-  if (!result.affectedRows) throw new AppError('Booking not found', 404)
-  return { id, status }
+  // La réservation est relue avant l'écriture : il faut son ancien statut pour
+  // décider d'une notification, et ses coordonnées pour la rédiger.
+  const [rows] = await pool.execute<AdminRow[]>(
+    `SELECT b.id, b.guest_name AS guestName, b.guest_email AS guestEmail,
+            b.check_in AS checkIn, b.check_out AS checkOut,
+            b.rooms_count AS rooms, b.adults, b.children, b.status,
+            COALESCE(r.name, r.slug) AS roomName
+     FROM bookings b LEFT JOIN rooms r ON r.id = b.room_id WHERE b.id = ? LIMIT 1`,
+    [id],
+  )
+  const booking = rows[0]
+  if (!booking) throw new AppError('Booking not found', 404)
+
+  await pool.execute<ResultSetHeader>('UPDATE bookings SET status = ? WHERE id = ?', [status, id])
+
+  // Le client n'est prévenu qu'au véritable passage à « confirmée » ou
+  // « annulée » : réappliquer le même statut (double clic, re-synchro) ne doit
+  // pas lui renvoyer un second e-mail, et un retour en « en attente » est une
+  // correction interne qui ne le concerne pas.
+  const decided = booking.status !== status && (status === 'confirmed' || status === 'cancelled')
+  if (!decided) {
+    return { id, status, notification: 'not-due' as const }
+  }
+
+  // Un envoi raté ne doit pas faire échouer un changement déjà écrit en base :
+  // `sendBookingDecisionToGuest` avale ses erreurs et renvoie un booléen. Le
+  // back-office distingue les trois cas pour ne pas laisser croire qu'un
+  // client a été prévenu alors que rien n'est parti.
+  const sent = await sendBookingDecisionToGuest({ ...booking, status })
+  return { id, status, notification: sent ? ('sent' as const) : ('failed' as const) }
 }
 
 const MESSAGE_FIELDS = `id, type, status, name, email, phone, subject, message,
