@@ -79,10 +79,35 @@ export const bookingSchema = z.object({
 
 // La disponibilité est consultable sur n'importe quelle période, y compris
 // passée : c'est une lecture, elle n'engage rien.
+//
+// `adults` / `children` sont facultatifs mais utiles : renseignés, ils écartent
+// les catégories trop petites, pour que la recherche réponde comme la
+// réservation répondra.
 export const availabilitySchema = z.object({
   ...stayDates,
   rooms: z.coerce.number().int().min(1, 'At least 1 room required').max(MAX_ROOMS_PER_BOOKING),
   roomId: z.string().trim().min(1).optional(),
+  adults: z.coerce.number().int().min(0).max(MAX_GUESTS_PER_BOOKING).optional(),
+  children: z.coerce.number().int().min(0).max(MAX_GUESTS_PER_BOOKING).optional(),
 })
   .refine(afterCheckIn, afterCheckInIssue)
   .refine(withinMaxStay, withinMaxStayIssue)
+
+/** Fenêtre du calendrier de disponibilité : `to` est exclusive. */
+export const MAX_CALENDAR_DAYS = 120
+
+const withinMaxWindow = (data: { from: string; to: string }) =>
+  (Date.parse(data.to) - Date.parse(data.from)) / DAY <= MAX_CALENDAR_DAYS
+
+export const availabilityCalendarSchema = z.object({
+  from: dateString('from'),
+  to: dateString('to'),
+})
+  .refine(data => Date.parse(data.to) > Date.parse(data.from), {
+    message: 'The end of the window must come after its start',
+    path: ['to'],
+  })
+  .refine(withinMaxWindow, {
+    message: `The window cannot exceed ${MAX_CALENDAR_DAYS} days`,
+    path: ['to'],
+  })

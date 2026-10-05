@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS room_amenities (
 CREATE TABLE IF NOT EXISTS bookings (
   id VARCHAR(191) NOT NULL,
   guest_name VARCHAR(191) NOT NULL,
-  guest_email VARCHAR(191) NOT NULL,
+  -- Nullable : une réservation prise par téléphone et saisie au back-office
+  -- n'a pas toujours d'adresse e-mail.
+  guest_email VARCHAR(191) NULL,
   guest_phone VARCHAR(64) NULL,
   check_in DATETIME NOT NULL,
   check_out DATETIME NOT NULL,
@@ -48,12 +50,36 @@ CREATE TABLE IF NOT EXISTS bookings (
   children INT NOT NULL DEFAULT 0,
   room_id VARCHAR(191) NOT NULL,
   status ENUM('pending', 'confirmed', 'cancelled') NOT NULL DEFAULT 'pending',
+  -- D'où vient la réservation : le site public, ou une saisie du back-office.
+  source ENUM('website', 'admin') NOT NULL DEFAULT 'website',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY bookings_check_in_check_out_idx (check_in, check_out),
   KEY bookings_room_id_idx (room_id),
   CONSTRAINT bookings_room_fk FOREIGN KEY (room_id) REFERENCES rooms (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+/*
+ * Périodes pendant lesquelles des unités d'un type de chambre ne sont pas
+ * vendables : travaux, fermeture, ou réservation reçue hors du site.
+ *
+ * `end_date` est exclusive, comme `bookings.check_out` : bloquer du 12 au 15
+ * occupe les nuits du 12, 13 et 14, et laisse le 15 libre à l'arrivée suivante.
+ */
+CREATE TABLE IF NOT EXISTS room_blocks (
+  id VARCHAR(191) NOT NULL,
+  room_id VARCHAR(191) NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  units INT NOT NULL DEFAULT 1,
+  reason VARCHAR(191) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY room_blocks_dates_idx (start_date, end_date),
+  KEY room_blocks_room_id_idx (room_id),
+  CONSTRAINT room_blocks_room_fk FOREIGN KEY (room_id) REFERENCES rooms (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS menu_sections (

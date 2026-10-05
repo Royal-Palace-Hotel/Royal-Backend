@@ -93,6 +93,10 @@ export async function sendBookingEmail(booking: any) {
  * elle n'est pas confirmée tant que l'hôtel ne l'a pas validée au back-office.
  */
 export async function sendBookingConfirmationToGuest(booking: any) {
+  // Une réservation saisie au back-office peut n'avoir aucune adresse : il n'y a
+  // alors personne à prévenir, et ce n'est pas une anomalie.
+  if (!booking.guestEmail) return false
+
   const roomName = booking.room?.name || booking.room?.slug || booking.roomId
   const nights = Math.max(Math.round(
     (new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / 86400000,

@@ -157,6 +157,7 @@ const created = {
   discover: [] as string[],
   users: [] as string[],
   uploads: [] as string[],
+  roomBlocks: [] as string[],
 }
 
 /* ------------------------------------------------------------------ */
@@ -612,6 +613,8 @@ async function testAdminIsProtected() {
     ['GET', '/admin/event-rooms'],
     ['GET', '/admin/bookings'],
     ['GET', '/admin/contact-messages'],
+    ['GET', '/admin/translate'],
+    ['POST', '/admin/translate'],
     ['DELETE', '/admin/rooms/peu-importe'],
   ]
 
@@ -992,7 +995,202 @@ async function testStats() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 16. Spa, galerie, Découvrir                                         */
+/* 16. Disponibilité : calendrier, blocages, saisie manuelle           */
+/* ------------------------------------------------------------------ */
+
+/** Jour `offset` à partir d'aujourd'hui, en UTC, au format AAAA-MM-JJ. */
+function day(offset: number) {
+  const now = new Date()
+  const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  return new Date(base + offset * 86400000).toISOString().slice(0, 10)
+}
+
+const freeOn = (rooms: any[], slug: string, date: string) =>
+  rooms?.find((room: any) => room.slug === slug)?.days?.find((d: any) => d.date === date)?.free
+
+async function testAvailabilityCalendar() {
+  section('Disponibilité — calendrier et blocages')
+
+  // On travaille loin dans le futur, pour ne pas dépendre des réservations
+  // déjà présentes en base.
+  const from = day(300)
+  const to = day(305)
+
+  const publicCalendar = await call('GET', `/content/availability?from=${from}&to=${to}`)
+  const rooms = publicCalendar.body?.data
+  if (!check('GET /content/availability', publicCalendar.status === 200 && isArray(rooms), publicCalendar)) return
+  check('  une entrée par chambre, avec ses jours',
+    rooms.length > 0 && isArray(rooms[0].days) && rooms[0].days.length === 5, rooms[0])
+  check('  le calendrier public ne dit que le reste à vendre',
+    rooms[0].days[0].booked === undefined && isNumber(rooms[0].days[0].free), rooms[0].days[0])
+
+  const reversed = await call('GET', `/content/availability?from=${to}&to=${from}`)
+  check('une fenêtre à l’envers est refusée en 400', reversed.status === 400, reversed)
+  const huge = await call('GET', `/content/availability?from=${day(0)}&to=${day(400)}`)
+  check('une fenêtre de plus de 120 jours est refusée en 400', huge.status === 400, huge)
+
+  const adminCalendar = await call('GET', `/admin/availability?from=${from}&to=${to}`, { auth: true })
+  const detailed = adminCalendar.body?.data
+  check('GET /admin/availability détaille réservé et bloqué',
+    adminCalendar.status === 200 && isNumber(detailed?.rooms?.[0]?.days?.[0]?.booked) &&
+    isNumber(detailed?.rooms?.[0]?.days?.[0]?.blocked) && isArray(detailed?.blocks), adminCalendar)
+
+  const slug = rooms[0].slug
+  const before = freeOn(rooms, slug, from)
+
+  // Blocage de 1 unité sur les deux premières nuits de la fenêtre.
+  const block = await call('POST', '/admin/room-blocks', {
+    auth: true,
+    body: {
+      roomId: rooms[0].roomId, startDate: from, endDate: day(302),
+      units: 1, reason: `Travaux ${RUN}`,
+    },
+  })
+  const blockId = block.body?.data?.id
+  if (!check('POST /admin/room-blocks', block.status === 200 && !!blockId, block)) return
+  created.roomBlocks.push(blockId)
+
+  const afterBlock = await call('GET', `/content/availability?from=${from}&to=${to}`)
+  check('  le blocage retire une unité au site public',
+    freeOn(afterBlock.body.data, slug, from) === before - 1, afterBlock.body?.data?.[0]?.days)
+  check('  la borne de fin est exclusive : le jour de fin reste libre',
+    freeOn(afterBlock.body.data, slug, day(302)) === before, afterBlock.body?.data?.[0]?.days)
+
+  const search = await call('POST', '/bookings/availability', {
+    body: { checkIn: from, checkOut: day(301), rooms: 1, roomId: slug },
+  })
+  check('  la recherche publique compte le blocage',
+    search.body?.blockedRooms === 1 && search.body?.availableRooms === before - 1, search.body)
+
+  const tooMany = await call('POST', '/admin/room-blocks', {
+    auth: true,
+    body: { roomId: rooms[0].roomId, startDate: from, endDate: day(301), units: 9999 },
+  })
+  check('bloquer plus d’unités que la catégorie n’en compte est refusé en 400',
+    tooMany.status === 400, tooMany)
+
+  const backwards = await call('POST', '/admin/room-blocks', {
+    auth: true,
+    body: { roomId: rooms[0].roomId, startDate: day(302), endDate: from, units: 1 },
+  })
+  check('une période à l’envers est refusée en 400', backwards.status === 400, backwards)
+}
+
+async function testManualBooking() {
+  section('Back-office — réservation saisie à la main')
+
+  const list = await call('GET', '/admin/rooms', { auth: true })
+  const room = list.body?.data?.find((entry: any) => entry.totalUnits >= 1)
+  if (!check('une chambre est disponible pour le test', !!room, list)) return
+
+  const manual = await call('POST', '/admin/bookings', {
+    auth: true,
+    body: {
+      guestName: `Appel ${RUN}`, guestPhone: '+261 34 00 000 00', guestEmail: '',
+      roomId: room.id, checkIn: day(310), checkOut: day(312),
+      rooms: 1, adults: 2, children: 0,
+    },
+  })
+  const booking = manual.body?.data
+  if (!check('POST /admin/bookings', manual.status === 200 && !!booking?.id, manual)) return
+
+  check('  elle est confirmée d’emblée', booking.status === 'confirmed', booking.status)
+  check('  elle est marquée comme saisie hors site', booking.source === 'admin', booking.source)
+  check('  une adresse vide est enregistrée comme absente', booking.guestEmail === null, booking.guestEmail)
+
+  const inList = await call('GET', `/admin/bookings?q=${RUN}`, { auth: true })
+  check('  elle apparaît dans la liste du back-office',
+    inList.body?.data?.some((row: any) => row.id === booking.id && row.source === 'admin'), inList.body?.data)
+
+  const calendar = await call('GET', `/content/availability?from=${day(310)}&to=${day(312)}`)
+  const left = freeOn(calendar.body.data, room.slug, day(310))
+  check('  elle occupe bien une unité au calendrier',
+    left === room.totalUnits - 1, { left, total: room.totalUnits })
+
+  const noName = await call('POST', '/admin/bookings', {
+    auth: true,
+    body: { guestName: 'x', roomId: room.id, checkIn: day(310), checkOut: day(311), rooms: 1, adults: 1 },
+  })
+  check('un nom trop court est refusé en 400', noName.status === 400, noName)
+
+  /*
+   * Deux nuits consécutives occupées par deux réservations distinctes ne
+   * doivent pas s'additionner : chaque nuit est comptée séparément. Un cumul
+   * sur la période refuserait une réservation pourtant possible.
+   */
+  if (room.totalUnits >= 2) {
+    const first = await call('POST', '/admin/bookings', {
+      auth: true,
+      body: {
+        guestName: `Nuit A ${RUN}`, roomId: room.id,
+        checkIn: day(320), checkOut: day(321), rooms: 1, adults: 1,
+      },
+    })
+    const second = await call('POST', '/admin/bookings', {
+      auth: true,
+      body: {
+        guestName: `Nuit B ${RUN}`, roomId: room.id,
+        checkIn: day(321), checkOut: day(322), rooms: 1, adults: 1,
+      },
+    })
+    check('deux nuits voisines, deux réservations : les deux passent',
+      first.status === 200 && second.status === 200, { first: first.status, second: second.status })
+
+    const span = await call('POST', '/bookings/availability', {
+      body: { checkIn: day(320), checkOut: day(322), rooms: 1, roomId: room.id },
+    })
+    check('  la disponibilité du séjour est celle de sa pire nuit, pas un cumul',
+      span.body?.availableRooms === room.totalUnits - 1,
+      { availableRooms: span.body?.availableRooms, total: room.totalUnits })
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 17. Traduction FR → EN                                              */
+/* ------------------------------------------------------------------ */
+
+async function testTranslation() {
+  section('Back-office — traduction FR → EN')
+
+  const phrase = 'Chambre avec vue sur le jardin'
+
+  const status = await call('GET', '/admin/translate', { auth: true })
+  const enabled = status.body?.data?.enabled
+  check('GET /admin/translate annonce la disponibilité',
+    status.status === 200 && typeof enabled === 'boolean', status)
+
+  const empty = await call('POST', '/admin/translate', { auth: true, body: { texts: [] } })
+  check('une liste vide est refusée en 400', empty.status === 400, empty)
+
+  const tooMany = await call('POST', '/admin/translate', {
+    auth: true, body: { texts: Array.from({ length: 11 }, (unused, index) => `texte ${index}`) },
+  })
+  check('au-delà de dix textes, refus en 400', tooMany.status === 400, tooMany)
+
+  const translated = await call('POST', '/admin/translate', { auth: true, body: { texts: [phrase] } })
+
+  // Sans clé, la route doit le dire clairement plutôt que de renvoyer du vide :
+  // le back-office retombe alors sur la saisie manuelle.
+  if (!enabled) {
+    check('sans clé DeepL, la route répond 503', translated.status === 503, translated)
+    note('DEEPL_API_KEY n’est pas configurée : traduction automatique désactivée,')
+    note('les champs « (EN) » du back-office se remplissent à la main.')
+    return
+  }
+
+  const result = translated.body?.data?.translations?.[0]
+  check('POST /admin/translate renvoie une traduction',
+    translated.status === 200 && typeof result === 'string' && result.length > 0, translated)
+  if (typeof result === 'string') note(`« ${phrase} » → « ${result} »`)
+
+  // Deuxième appel : servi par le cache, donc sans consommer de quota.
+  const again = await call('POST', '/admin/translate', { auth: true, body: { texts: [phrase] } })
+  check('le même texte redonne la même traduction (cache)',
+    again.body?.data?.translations?.[0] === result, again)
+}
+
+/* ------------------------------------------------------------------ */
+/* 18. Spa, galerie, Découvrir                                         */
 /* ------------------------------------------------------------------ */
 
 async function testSpa() {
@@ -1139,7 +1337,7 @@ async function testDiscover() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 17. Pagination, recherche, tri                                      */
+/* 19. Pagination, recherche, tri                                      */
 /* ------------------------------------------------------------------ */
 
 async function testListControls() {
@@ -1187,7 +1385,7 @@ async function testListControls() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 18. Fiche détaillée                                                 */
+/* 20. Fiche détaillée                                                 */
 /* ------------------------------------------------------------------ */
 
 async function testDetails() {
@@ -1216,7 +1414,7 @@ async function testDetails() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 19. Abonnés et exports CSV                                          */
+/* 21. Abonnés et exports CSV                                          */
 /* ------------------------------------------------------------------ */
 
 async function testSubscribersAndExports() {
@@ -1280,7 +1478,7 @@ async function testSubscribersAndExports() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 20. Comptes, rôles et journal                                       */
+/* 22. Comptes, rôles et journal                                       */
 /* ------------------------------------------------------------------ */
 
 async function testUsersAndRoles() {
@@ -1434,7 +1632,7 @@ async function testUsersAndRoles() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 21. Envoi d'images                                                  */
+/* 23. Envoi d'images                                                  */
 /* ------------------------------------------------------------------ */
 
 /** PNG 1×1 valide, pour ne dépendre d'aucun fichier du dépôt. */
@@ -1569,8 +1767,11 @@ async function cleanup() {
       })
       try {
         const like = `%@${MAIL_DOMAIN}`
+        // Le nom aussi : une réservation saisie au back-office peut n'avoir
+        // aucune adresse e-mail, elle ne serait alors jamais ramassée.
         const [bookings] = await connection.execute(
-          'DELETE FROM bookings WHERE guest_email LIKE ?', [like],
+          'DELETE FROM bookings WHERE guest_email LIKE ? OR guest_name LIKE ?',
+          [like, `%${RUN}%`],
         )
         const [messages] = await connection.execute(
           'DELETE FROM contact_messages WHERE email LIKE ?', [like],
@@ -1599,6 +1800,7 @@ async function cleanup() {
   let removed = 0
   for (const [path, ids] of [
     ['/admin/uploads', created.uploads],
+    ['/admin/room-blocks', created.roomBlocks],
     ['/admin/menu/items', created.menuItems],
     ['/admin/menu/sections', created.menuSections],
     ['/admin/event-rooms', created.eventRooms],
@@ -1635,6 +1837,9 @@ async function main() {
     await testAuth()               // renseigne `token`
     await testAdminIsProtected()
     await testStats()
+    await testAvailabilityCalendar()
+    await testManualBooking()
+    await testTranslation()
     await testAdminRooms()
     await testAdminMenu()
     await testAdminEventRooms()

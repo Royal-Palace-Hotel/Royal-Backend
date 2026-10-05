@@ -5,6 +5,10 @@ import * as users from './users'
 import { getDashboardStats } from './stats'
 import { listAuditLog, recordAudit, AuditAction } from './audit'
 import { csvFilename, toCsv } from './csv'
+import { translateToEnglish, translationEnabled } from '../../utils/translate'
+import * as blocks from './blocks'
+import { getAvailabilityCalendar } from '../bookings/availability'
+import { createBooking } from '../bookings/service'
 
 /** Enveloppe un handler : la valeur renvoyée part dans `{ data }`. */
 function handle(operation: (req: Request) => Promise<unknown>): RequestHandler {
@@ -58,6 +62,75 @@ function sendCsv(res: Response, base: string, body: string) {
 /* ------------------------------------------------------------------ */
 
 export const stats = handle(() => getDashboardStats())
+
+/* ------------------------------------------------------------------ */
+/* Disponibilité                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Tableau de disponibilité du back-office.
+ *
+ * Même calcul que le site public, mais détaillé : la réception a besoin de
+ * distinguer ce qui est vendu de ce qui est bloqué, et de savoir pourquoi. Les
+ * périodes bloquées de la fenêtre accompagnent donc le calendrier, pour éviter
+ * un second aller-retour.
+ */
+export const availability = handle(async (req) => {
+  const { from, to } = req.query as unknown as { from: string; to: string }
+  const [calendar, periods] = await Promise.all([
+    getAvailabilityCalendar(new Date(from), new Date(to)),
+    blocks.listRoomBlocks({ from, to }),
+  ])
+  return { from, to, rooms: calendar, blocks: periods }
+})
+
+export const listRoomBlocks = handle((req) =>
+  blocks.listRoomBlocks(req.query as { from?: string; to?: string }))
+
+export const createRoomBlock = audited('create', 'roomBlock',
+  (req) => blocks.saveRoomBlock(req.body),
+  (req) => `${req.body.startDate} → ${req.body.endDate}`)
+
+export const updateRoomBlock = audited('update', 'roomBlock',
+  (req) => blocks.saveRoomBlock(req.body, String(req.params.id)),
+  (req) => `${req.body.startDate} → ${req.body.endDate}`)
+
+export const deleteRoomBlock = audited('delete', 'roomBlock',
+  (req) => blocks.deleteRoomBlock(String(req.params.id)))
+
+/**
+ * Réservation saisie à la main.
+ *
+ * Elle passe par le même service que le site : c'est là que vit le verrou qui
+ * empêche la survente, et la réception doit en bénéficier autant que le
+ * visiteur. Aucun e-mail ne part — elle a le client en ligne.
+ */
+export const createManualBooking = audited('create', 'booking',
+  (req) => createBooking(req.body, {
+    source: 'admin',
+    status: req.body.status,
+    notify: false,
+  }),
+  (req) => `${req.body.guestName} (saisie manuelle)`)
+
+/* ------------------------------------------------------------------ */
+/* Traduction FR → EN                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Le back-office demande cet état au chargement pour n'afficher la traduction
+ * automatique que si le serveur sait la fournir.
+ */
+export const translationStatus = handle(async () => ({ enabled: translationEnabled }))
+
+/**
+ * Traduction à la demande : rien n'est écrit en base, la proposition revient au
+ * formulaire qui l'affiche dans un champ modifiable. Pas de trace au journal, il
+ * n'y a pas de modification de contenu à tracer.
+ */
+export const translate = handle(async (req) => ({
+  translations: await translateToEnglish(req.body.texts),
+}))
 
 /* ------------------------------------------------------------------ */
 /* Chambres                                                            */

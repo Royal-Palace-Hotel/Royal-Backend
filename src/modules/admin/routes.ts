@@ -3,12 +3,13 @@ import { authMiddleware, ensureActiveUser, requireAdmin } from '../../middleware
 import { validate } from '../../middleware/validate'
 import * as controller from './controller'
 import { deleteUpload, handleUpload, uploadErrorHandler, uploadMiddleware } from './uploads'
+import { availabilityCalendarSchema } from '../bookings/validation'
 import {
   adminUserCreateSchema, adminUserUpdateSchema, auditQuerySchema, bookingStatusSchema,
   bookingsQuerySchema, changePasswordSchema, contactStatusSchema, discoverItemSchema,
   discoverQuerySchema, eventRoomSchema, galleryImageSchema, galleryQuerySchema, idSchema,
-  menuItemSchema, menuSectionSchema, messagesQuerySchema, roomSchema, spaTreatmentSchema,
-  subscribersQuerySchema,
+  manualBookingSchema, menuItemSchema, menuSectionSchema, messagesQuerySchema, roomBlockSchema,
+  roomBlocksQuerySchema, roomSchema, spaTreatmentSchema, subscribersQuerySchema, translateSchema,
 } from './validation'
 
 const router = Router()
@@ -19,6 +20,11 @@ router.use(ensureActiveUser)
 
 // Tableau de bord
 router.get('/stats', controller.stats)
+
+// Traduction FR → EN des champs du back-office. `GET` dit si le serveur sait la
+// faire (clé DeepL configurée), `POST` traduit un lot de textes.
+router.get('/translate', controller.translationStatus)
+router.post('/translate', validate(translateSchema), controller.translate)
 
 // Envoi d'images. Le corps est en multipart : `validate` (qui lit du JSON)
 // ne s'applique pas ici, c'est multer qui filtre type et taille.
@@ -66,8 +72,16 @@ router.post('/discover', validate(discoverItemSchema), controller.createDiscover
 router.put('/discover/:id', id, validate(discoverItemSchema), controller.updateDiscover)
 router.delete('/discover/:id', id, controller.deleteDiscover)
 
+// Disponibilité : tableau jour par jour et périodes bloquées.
+router.get('/availability', validate(availabilityCalendarSchema, 'query'), controller.availability)
+router.get('/room-blocks', validate(roomBlocksQuerySchema, 'query'), controller.listRoomBlocks)
+router.post('/room-blocks', validate(roomBlockSchema), controller.createRoomBlock)
+router.put('/room-blocks/:id', id, validate(roomBlockSchema), controller.updateRoomBlock)
+router.delete('/room-blocks/:id', id, controller.deleteRoomBlock)
+
 // Réservations — `/export` avant `/:id`, sinon il serait capturé comme un id.
 router.get('/bookings', validate(bookingsQuerySchema, 'query'), controller.listBookings)
+router.post('/bookings', validate(manualBookingSchema), controller.createManualBooking)
 router.get('/bookings/export', validate(bookingsQuerySchema, 'query'), controller.exportBookings)
 router.get('/bookings/:id', id, controller.getBooking)
 router.patch('/bookings/:id', id, validate(bookingStatusSchema), controller.updateBookingStatus)

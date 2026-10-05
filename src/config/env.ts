@@ -56,6 +56,24 @@ export const FROM_NAME = process.env.FROM_NAME || 'Royal Palace Antsirabe'
 
 export const HOTEL_EMAIL = process.env.HOTEL_EMAIL || 'royalpalace.resa@moov.mg'
 
+/**
+ * Traduction française → anglaise des champs du back-office (DeepL).
+ *
+ * Optionnel : sans clé, les champs « (EN) » se remplissent à la main comme
+ * avant, et le back-office masque simplement la proposition automatique.
+ *
+ * Les clés de l'offre gratuite se terminent par « :fx » et visent un autre
+ * domaine que les clés payantes. On le déduit de la clé plutôt que de le faire
+ * configurer : interverti, DeepL répond un 403 difficile à relier à sa cause.
+ */
+export const DEEPL_API_KEY = (process.env.DEEPL_API_KEY || '').trim()
+export const DEEPL_API_URL = process.env.DEEPL_API_URL || (DEEPL_API_KEY.endsWith(':fx')
+  ? 'https://api-free.deepl.com/v2/translate'
+  : 'https://api.deepl.com/v2/translate')
+
+/** DeepL exige une variante pour l'anglais : `EN-GB` ou `EN-US`. */
+export const DEEPL_TARGET_LANG = process.env.DEEPL_TARGET_LANG || 'EN-GB'
+
 const DEFAULT_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',

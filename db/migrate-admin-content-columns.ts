@@ -14,6 +14,10 @@ interface ColumnRow extends RowDataPacket {
   COLUMN_NAME: string
 }
 
+interface NullabilityRow extends RowDataPacket {
+  IS_NULLABLE: 'YES' | 'NO'
+}
+
 const schemaUpdates: Record<string, Array<readonly [string, string]>> = {
   rooms: [
     ['name', 'VARCHAR(191) NULL'],
@@ -46,7 +50,23 @@ const schemaUpdates: Record<string, Array<readonly [string, string]>> = {
     ['last_login_at', 'DATETIME NULL'],
     ['token_version', 'INT NOT NULL DEFAULT 0'],
   ],
+  bookings: [
+    // Distingue une réservation venue du site d'une saisie du back-office.
+    ['source', "ENUM('website', 'admin') NOT NULL DEFAULT 'website'"],
+  ],
 }
+
+/**
+ * Colonnes existantes qui doivent devenir nullables.
+ *
+ * `guest_email` était obligatoire : une réservation prise par téléphone et
+ * saisie au back-office n'a pas toujours d'adresse. On ne rejoue le `MODIFY`
+ * que si la colonne est encore NOT NULL, pour ne pas reconstruire la table à
+ * chaque exécution.
+ */
+const nullableUpdates: Array<readonly [string, string, string]> = [
+  ['bookings', 'guest_email', 'VARCHAR(191) NULL'],
+]
 
 async function main() {
   try {
@@ -72,7 +92,20 @@ async function main() {
       console.log(`  + ${missingColumns.map(([name]) => `${table}.${name}`).join(', ')}`)
     }
 
-    console.log(total === 0 ? 'Schéma déjà à jour.' : `${total} colonne(s) ajoutée(s).`)
+    for (const [table, column, definition] of nullableUpdates) {
+      const [rows] = await pool.query<NullabilityRow[]>(
+        `SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+        [table, column],
+      )
+      if (rows.length === 0 || rows[0].IS_NULLABLE === 'YES') continue
+
+      await pool.query(`ALTER TABLE \`${table}\` MODIFY \`${column}\` ${definition}`)
+      total += 1
+      console.log(`  ~ ${table}.${column} devient facultative`)
+    }
+
+    console.log(total === 0 ? 'Schéma déjà à jour.' : `${total} modification(s) appliquée(s).`)
   } finally {
     await pool.end()
   }

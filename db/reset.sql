@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS event_rooms;
 DROP TABLE IF EXISTS spa_treatments;
 DROP TABLE IF EXISTS menu_items;
 DROP TABLE IF EXISTS menu_sections;
+DROP TABLE IF EXISTS room_blocks;
 DROP TABLE IF EXISTS bookings;
 DROP TABLE IF EXISTS room_amenities;
 DROP TABLE IF EXISTS room_images;

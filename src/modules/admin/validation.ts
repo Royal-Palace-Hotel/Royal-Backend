@@ -147,6 +147,71 @@ export const discoverQuerySchema = z.object({
 })
 
 /* ------------------------------------------------------------------ */
+/* Disponibilité : périodes bloquées et saisie manuelle                */
+/* ------------------------------------------------------------------ */
+
+/** `YYYY-MM-DD` : le back-office ne manipule que des jours, jamais des heures. */
+const dayString = (label: string) => z.string().trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, `${label} doit être une date au format AAAA-MM-JJ`)
+
+export const roomBlockSchema = z.object({
+  roomId: z.string().trim().min(1, 'Choisissez une chambre').max(191),
+  startDate: dayString('Le début'),
+  endDate: dayString('La fin'),
+  units: z.coerce.number().int().min(1, 'Au moins une unité').max(999),
+  reason: z.string().trim().max(191).nullable().optional(),
+}).refine(
+  (data) => Date.parse(data.endDate) > Date.parse(data.startDate),
+  { message: 'La fin doit suivre le début', path: ['endDate'] },
+)
+
+export const roomBlocksQuerySchema = z.object({
+  from: dayString('Le début').optional(),
+  to: dayString('La fin').optional(),
+})
+
+/**
+ * Réservation saisie au back-office (téléphone, comptoir).
+ *
+ * Deux différences avec le formulaire public : l'adresse e-mail est facultative
+ * — on n'a pas toujours celle d'un client au téléphone — et une arrivée passée
+ * est acceptée, pour pouvoir régulariser un séjour déjà commencé.
+ */
+export const manualBookingSchema = z.object({
+  guestName: z.string().trim().min(2, 'Nom trop court').max(191),
+  guestEmail: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    z.string().trim().email('Adresse e-mail invalide').max(191).nullable().optional(),
+  ),
+  guestPhone: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    z.string().trim().max(64).nullable().optional(),
+  ),
+  checkIn: dayString('L’arrivée'),
+  checkOut: dayString('Le départ'),
+  roomId: z.string().trim().min(1, 'Choisissez une chambre').max(191),
+  rooms: z.coerce.number().int().min(1).max(10),
+  adults: z.coerce.number().int().min(1, 'Au moins un adulte').max(40),
+  children: z.coerce.number().int().min(0).max(40).default(0),
+  status: z.enum(['pending', 'confirmed']).default('confirmed'),
+}).refine(
+  (data) => Date.parse(data.checkOut) > Date.parse(data.checkIn),
+  { message: 'Le départ doit suivre l’arrivée', path: ['checkOut'] },
+)
+
+/* ------------------------------------------------------------------ */
+/* Traduction FR → EN                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Dix champs au plus par appel : de quoi traduire un formulaire entier d'un
+ * coup, sans ouvrir la porte à des lots qui videraient le quota mensuel.
+ */
+export const translateSchema = z.object({
+  texts: z.array(z.string().trim().min(1).max(5000)).min(1).max(10),
+})
+
+/* ------------------------------------------------------------------ */
 /* Comptes d'administration                                            */
 /* ------------------------------------------------------------------ */
 

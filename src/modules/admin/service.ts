@@ -232,7 +232,7 @@ const BOOKING_FIELDS = `b.id, b.guest_name AS guestName, b.guest_email AS guestE
   b.guest_phone AS guestPhone, b.check_in AS checkIn, b.check_out AS checkOut,
   b.rooms_count AS rooms, b.adults, b.children, b.room_id AS roomId,
   COALESCE(r.name, r.slug) AS roomName, r.price AS roomPrice, r.currency AS roomCurrency,
-  b.status, b.created_at AS createdAt, b.updated_at AS updatedAt,
+  b.status, b.source, b.created_at AS createdAt, b.updated_at AS updatedAt,
   DATEDIFF(b.check_out, b.check_in) AS nights`
 
 function bookingWhere(filters: ListFilters) {

@@ -30,7 +30,8 @@ export interface RoomAmenityRow extends RowDataPacket {
 export interface BookingRow extends RowDataPacket {
   id: string
   guest_name: string
-  guest_email: string
+  /** Absente pour une réservation saisie au back-office depuis un appel. */
+  guest_email: string | null
   guest_phone: string | null
   check_in: Date
   check_out: Date
@@ -39,6 +40,18 @@ export interface BookingRow extends RowDataPacket {
   children: number
   room_id: string
   status: 'pending' | 'confirmed' | 'cancelled'
+  source: 'website' | 'admin'
+  created_at: Date
+  updated_at: Date
+}
+
+export interface RoomBlockRow extends RowDataPacket {
+  id: string
+  room_id: string
+  start_date: string
+  end_date: string
+  units: number
+  reason: string | null
   created_at: Date
   updated_at: Date
 }

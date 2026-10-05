@@ -123,6 +123,8 @@ explicitement en fin de rapport plutôt que de laisser croire à une régression
 | `GMAIL_APP_PASSWORD` | non | Mot de passe d'application à 16 caractères, pas celui du compte |
 | `FROM_NAME` | non | Nom affiché comme expéditeur (défaut `Royal Palace Antsirabe`) |
 | `HOTEL_EMAIL` | non | Destinataire des notifications (défaut `royalpalace.resa@moov.mg`) |
+| `DEEPL_API_KEY` | non | Traduction FR → EN du back-office. Vide ⇒ les champs « (EN) » se remplissent à la main |
+| `DEEPL_TARGET_LANG` | non | Variante d'anglais produite : `EN-GB` (défaut) ou `EN-US` |
 | `PORT` | non | Défaut `4000` |
 | `NODE_ENV` | non | `development` ou `production` |
 | `CORS_ORIGIN` | en production | Origines autorisées, séparées par des virgules |
@@ -151,6 +153,7 @@ erreurs dans `error` (avec `details` pour les erreurs de validation).
 | `GET` | `/api/content/gallery` | Images de la galerie, avec leur catégorie |
 | `GET` | `/api/content/discover` | `{ activities, attractions }` de la page Découvrir |
 | `GET` | `/api/restaurant/menu` | Identique à `/api/content/menu` |
+| `GET` | `/api/content/availability` | Calendrier : unités libres par nuit, `from` / `to` |
 | `POST` | `/api/bookings/availability` | Disponibilité sur une période |
 | `POST` | `/api/bookings` | Création d'une réservation |
 | `POST` | `/api/contact` | Message de contact |
@@ -160,11 +163,39 @@ erreurs dans `error` (avec `details` pour les erreurs de validation).
 Les endpoints en écriture sont limités à 30 requêtes / 15 min par adresse IP.
 
 **Disponibilité** — `roomId` est facultatif ; sans lui, le calcul porte sur
-l'ensemble de l'hôtel.
+l'ensemble de l'hôtel. `adults` / `children` sont facultatifs mais utiles :
+renseignés, ils écartent les catégories trop petites, pour que la recherche
+réponde comme la réservation répondra.
 
 ```json
 { "checkIn": "2026-12-01", "checkOut": "2026-12-05", "rooms": 1, "roomId": "suite" }
 ```
+
+La réponse détaille ce qui occupe la période, pour pouvoir l'expliquer au
+visiteur plutôt que de répondre un simple « non » :
+
+```json
+{
+  "available": true, "availableRooms": 2, "requestedRooms": 1,
+  "totalRooms": 4, "bookedRooms": 1, "blockedRooms": 1,
+  "fitsParty": true, "maxGuests": 4
+}
+```
+
+**Calendrier** — `GET /api/content/availability?from=2026-12-01&to=2026-12-08`
+renvoie, pour chaque catégorie, les unités encore vendables **nuit par nuit**.
+`to` est exclusive, la fenêtre est plafonnée à 120 jours. Un seul appel suffit
+donc à afficher toutes les chambres, là où il fallait auparavant une requête par
+chambre.
+
+```json
+{ "data": [ { "roomId": "suite", "slug": "suite-royale", "totalUnits": 4,
+  "days": [ { "date": "2026-12-01", "free": 2 }, { "date": "2026-12-02", "free": 4 } ] } ] }
+```
+
+Le calendrier public ne dit **que** le reste à vendre : ni qui a réservé, ni
+pourquoi une unité est bloquée. Le détail (`booked`, `blocked`) reste au
+back-office.
 
 **Réservation** — `roomId` est facultatif : s'il est absent, la chambre la moins
 chère pouvant accueillir le groupe et disponible sur la période est attribuée.
@@ -200,6 +231,43 @@ verrou (`SELECT … FOR UPDATE`) : deux réservations simultanées ne peuvent pa
 dépasser le nombre d'unités disponibles. En cas de dépassement, l'API répond
 `409`.
 
+### Comment la disponibilité est calculée
+
+Deux choses occupent une unité : une **réservation active** (`pending` ou
+`confirmed` — une annulation rend ses nuits) et un **blocage** (`room_blocks` :
+travaux, fermeture, réservation reçue hors du site). Les bornes de fin sont
+toujours **exclusives** : un séjour du 12 au 15 occupe les nuits du 12, 13 et 14,
+et laisse le 15 libre pour l'arrivée suivante.
+
+Tout se calcule **nuit par nuit**, jamais en cumulant les réservations d'une
+période — c'est la seule façon d'obtenir la bonne réponse. Dans une catégorie de
+2 unités où une réservation occupe la nuit du 12 et une autre celle du 13, un
+cumul sur le séjour du 12 au 14 conclurait « 0 disponible », alors qu'une unité
+est libre chacune des deux nuits : on refuserait une réservation parfaitement
+possible. La disponibilité d'un séjour est donc celle de **sa pire nuit**.
+
+Le calendrier affiché et le contrôle fait à la réservation partagent le même
+calcul ([`src/modules/bookings/availability.ts`](src/modules/bookings/availability.ts)) :
+ce qui est annoncé libre à l'écran est exactement ce qui sera accepté.
+
+Côté hôtel entier, le reste à vendre est plafonné catégorie par catégorie avant
+d'être additionné : sans cela, une catégorie bloquée au-delà de son stock
+viendrait masquer les unités libres d'une autre.
+
+**Périodes bloquées.** `room_blocks` ferme des unités sans créer de réservation
+nominative : travaux, fermeture saisonnière, ou allotement. Elles sont décomptées
+par le même calcul, donc elles ferment le site public en même temps qu'elles
+noircissent le tableau du back-office. Bloquer plus d'unités que la catégorie
+n'en compte est refusé en `400`.
+
+**Réservations saisies au back-office.** `POST /api/admin/bookings` enregistre un
+appel téléphonique ou une réservation au comptoir. Elle passe par le même service
+que le site public — donc par le même verrou anti-survente — avec trois
+différences : le statut vaut `confirmed` par défaut, l'adresse e-mail est
+facultative (on n'a pas toujours celle d'un client au téléphone), et **aucun
+e-mail n'est envoyé**. La colonne `bookings.source` distingue ensuite `website`
+de `admin` dans la liste du back-office.
+
 ### Authentification
 
 | Méthode | Chemin | Rôle |
@@ -216,6 +284,9 @@ Limite : 10 tentatives / 15 min par IP.
 | --- | --- |
 | Tableau de bord | `GET /api/admin/stats` |
 | Images | `POST /api/admin/uploads` · `DELETE /api/admin/uploads/:fichier` |
+| Traduction | `GET /api/admin/translate` (disponibilité) · `POST /api/admin/translate` |
+| Disponibilité | `GET /api/admin/availability?from=&to=` |
+| Périodes bloquées | `GET POST /api/admin/room-blocks` · `PUT DELETE /api/admin/room-blocks/:id` |
 | Chambres | `GET POST /api/admin/rooms` · `GET PUT DELETE /api/admin/rooms/:id` |
 | Sections de carte | `GET POST /api/admin/menu/sections` · `PUT DELETE /api/admin/menu/sections/:id` |
 | Plats | `GET POST /api/admin/menu/items` · `PUT DELETE /api/admin/menu/items/:id` |
@@ -223,7 +294,7 @@ Limite : 10 tentatives / 15 min par IP.
 | Soins du spa | `GET POST /api/admin/spa` · `PUT DELETE /api/admin/spa/:id` |
 | Galerie photo | `GET POST /api/admin/gallery` (filtre `category`) · `PUT DELETE /api/admin/gallery/:id` |
 | Page Découvrir | `GET POST /api/admin/discover` (filtre `type`) · `PUT DELETE /api/admin/discover/:id` |
-| Réservations | `GET /api/admin/bookings` · `GET /api/admin/bookings/:id` · `PATCH /api/admin/bookings/:id` · `GET /api/admin/bookings/export` |
+| Réservations | `GET POST /api/admin/bookings` · `GET /api/admin/bookings/:id` · `PATCH /api/admin/bookings/:id` · `GET /api/admin/bookings/export` |
 | Messages | `GET /api/admin/contact-messages` · `GET`/`PATCH`/`DELETE` `/:id` · `GET /api/admin/contact-messages/export` |
 | Abonnés | `GET /api/admin/subscribers` · `DELETE /api/admin/subscribers/:id` · `GET /api/admin/subscribers/export` |
 | Mon compte | `PUT /api/admin/account/password` |
@@ -266,6 +337,29 @@ prévois un volume persistant pour ce dossier** : sur un hébergement au systèm
 de fichiers éphémère (Heroku, conteneur sans volume), les images disparaîtraient
 à chaque redéploiement. Remplacer une image ne supprime pas l'ancienne : le
 ménage se fait avec `DELETE /api/admin/uploads/:fichier`.
+
+**Traduction FR → EN.** Le back-office propose la version anglaise des champs de
+contenu au fur et à mesure de la saisie : dès qu'on quitte un champ français, son
+jumeau « (EN) » se remplit **s'il est encore vide**, et un bouton « Retraduire »
+permet de forcer un remplacement après une correction du français. La proposition
+arrive dans un champ ordinaire : elle est modifiable, et c'est bien la valeur
+affichée à l'écran qui est enregistrée. Rien n'est traduit à l'insertion en base.
+
+```http
+POST /api/admin/translate      { "texts": ["Chambre avec vue sur le jardin"] }
+→ { "data": { "translations": ["Room with garden view"] } }
+```
+
+Dix textes au plus par appel. Le service est **facultatif** : sans
+`DEEPL_API_KEY`, `GET /api/admin/translate` renvoie `{ enabled: false }`, le
+back-office n'affiche aucune proposition et les champs anglais se remplissent à
+la main — exactement comme avant. La clé ne quitte jamais le serveur : le
+navigateur n'appelle pas DeepL lui-même.
+
+Les traductions déjà obtenues sont gardées en mémoire (500 textes). Le
+back-office traduit à chaque sortie de champ : sans ce cache, revenir sur une
+description pour corriger une virgule referait un appel facturé au quota mensuel
+pour un texte déjà traduit. Le cache est vidé au redémarrage de l'API.
 
 **Comptes et sécurité.** Un compte désactivé est refusé dès sa requête suivante
 (et non à l'expiration de son jeton) : chaque requête d'administration revérifie
@@ -315,12 +409,15 @@ Royal-Backend/
 │   │   ├── content/                    # Lecture publique du contenu
 │   │   ├── restaurant/                 # Carte publique
 │   │   ├── bookings/                   # Disponibilité et réservations
+│   │   │   └── availability.ts         # Calcul nuit par nuit, partagé site + back-office
 │   │   ├── contact/                    # Contact et demandes de devis
 │   │   ├── newsletter/                 # Inscriptions
 │   │   ├── auth/                       # Connexion et inscription
 │   │   └── admin/                      # CRUD du back-office
 │   ├── types/database.ts               # Interfaces des lignes SQL
-│   └── utils/email.ts                  # Envoi via le SMTP de Gmail
+│   └── utils/
+│       ├── email.ts                    # Envoi via le SMTP de Gmail
+│       └── translate.ts                # Traduction FR → EN du back-office (DeepL)
 ├── tests/api.test.ts                   # Test global de l'API (npm run test:api)
 ├── uploads/                            # Images envoyées depuis le back-office (hors Git)
 ├── _unused/                            # Anciens fichiers retirés de src/ (voir son README)
@@ -332,8 +429,8 @@ Royal-Backend/
 
 ## Base de données
 
-`rooms`, `room_images`, `room_amenities`, `bookings`, `menu_sections`,
-`menu_items`, `spa_treatments`, `event_rooms`, `gallery_images`,
+`rooms`, `room_images`, `room_amenities`, `bookings`, `room_blocks`,
+`menu_sections`, `menu_items`, `spa_treatments`, `event_rooms`, `gallery_images`,
 `discover_items`, `contact_messages`, `newsletter_subscribers`, `admin_users`,
 `admin_audit_log`.
 
@@ -350,6 +447,17 @@ le seed. Pour une base créée avant l'ajout des colonnes éditables (`rooms.nam
 `npm run db:migrate:admin-content` ajoute uniquement celles qui manquent — la
 commande est sûre à relancer. Les nouvelles *tables* sont créées par
 `db/schema.sql`, en `CREATE TABLE IF NOT EXISTS`.
+
+Pour une base antérieure au tableau de disponibilité, la mise à jour tient en
+deux commandes, sans perte de données :
+
+```bash
+npm run db:init                    # crée room_blocks
+npm run db:migrate:admin-content   # ajoute bookings.source, rend guest_email facultative
+```
+
+`bookings.guest_email` devient **nullable** : une réservation saisie au
+back-office depuis un appel n'a pas toujours d'adresse.
 
 ---
 
