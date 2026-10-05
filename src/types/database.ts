@@ -8,6 +8,10 @@ export interface RoomRow extends RowDataPacket {
   name_en: string | null
   description: string | null
   description_en: string | null
+  view: string | null
+  view_en: string | null
+  bed_type: string | null
+  bed_type_en: string | null
   price: number
   currency: string
   size: number

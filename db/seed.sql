@@ -1,13 +1,25 @@
 USE royal_palace;
 
-INSERT INTO rooms (id, slug, translation_key, name, name_en, description, description_en, price, currency, size, max_guests, total_units) VALUES
-  ('classic', 'chambre-classique', 'classic', NULL, NULL, NULL, NULL, 65, 'EUR', 22, 2, 10),
-  ('superior', 'chambre-superieure', 'superior', NULL, NULL, NULL, NULL, 95, 'EUR', 28, 3, 8),
-  ('deluxe', 'chambre-deluxe', 'deluxe', NULL, NULL, NULL, NULL, 130, 'EUR', 34, 3, 6),
-  ('suite', 'suite-royale', 'suite', NULL, NULL, NULL, NULL, 220, 'EUR', 55, 4, 4)
+-- `view` et `bed_type` reprennent ce qui vivait dans les fichiers de traduction,
+-- pour que les quatre chambres d'origine soient éditables au back-office comme
+-- les autres. `COALESCE` ne les pose que si elles sont encore vides : une
+-- valeur saisie au back-office n'est jamais réécrite par un nouveau seed.
+INSERT INTO rooms (id, slug, translation_key, name, name_en, description, description_en,
+  view, view_en, bed_type, bed_type_en, price, currency, size, max_guests, total_units) VALUES
+  ('classic', 'chambre-classique', 'classic', NULL, NULL, NULL, NULL,
+   'Vue jardin', 'Garden view', 'Lit double ou lits jumeaux', 'Double or twin beds', 65, 'EUR', 22, 2, 10),
+  ('superior', 'chambre-superieure', 'superior', NULL, NULL, NULL, NULL,
+   'Vue jardin ou piscine', 'Garden or pool view', 'Lit king size', 'King size bed', 95, 'EUR', 28, 3, 8),
+  ('deluxe', 'chambre-deluxe', 'deluxe', NULL, NULL, NULL, NULL,
+   'Vue piscine', 'Pool view', 'Lit king size', 'King size bed', 130, 'EUR', 34, 3, 6),
+  ('suite', 'suite-royale', 'suite', NULL, NULL, NULL, NULL,
+   'Vue panoramique', 'Panoramic view', 'Lit king size + canapé-lit', 'King size bed + sofa bed', 220, 'EUR', 55, 4, 4)
 ON DUPLICATE KEY UPDATE
   slug = VALUES(slug), translation_key = VALUES(translation_key), price = VALUES(price),
-  currency = VALUES(currency), size = VALUES(size), max_guests = VALUES(max_guests), total_units = VALUES(total_units);
+  currency = VALUES(currency), size = VALUES(size), max_guests = VALUES(max_guests),
+  total_units = VALUES(total_units),
+  view = COALESCE(view, VALUES(view)), view_en = COALESCE(view_en, VALUES(view_en)),
+  bed_type = COALESCE(bed_type, VALUES(bed_type)), bed_type_en = COALESCE(bed_type_en, VALUES(bed_type_en));
 
 INSERT INTO room_images (room_id, image, sort_order) VALUES
   ('classic', '/images/rooms/room-4.jpg', 0),

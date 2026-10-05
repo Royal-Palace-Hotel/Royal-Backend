@@ -31,7 +31,8 @@ export interface BookingRecord {
 }
 
 const ROOM_FIELDS =
-  'id, slug, translation_key, name, name_en, description, description_en, price, currency, size, max_guests, total_units'
+  `id, slug, translation_key, name, name_en, description, description_en,
+   view, view_en, bed_type, bed_type_en, price, currency, size, max_guests, total_units`
 
 async function findRoom(roomId: string) {
   const [rows] = await pool.execute<RoomRow[]>(
@@ -271,4 +272,96 @@ export async function createBooking(input: {
     ])
   }
   return booking
+}
+
+/**
+ * Modifie une réservation existante depuis le back-office : dates, chambre,
+ * occupation, coordonnées.
+ *
+ * Même verrou que la création — déplacer un séjour consomme du stock, donc
+ * cette opération peut survendre si elle n'est pas protégée. La différence
+ * tient en un point : la réservation **s'ignore elle-même** dans le calcul de
+ * disponibilité. Sans cela, prolonger un séjour d'une nuit dans une catégorie
+ * complète échouerait, alors que l'unité en question est déjà la sienne.
+ *
+ * Aucun e-mail n'est envoyé : c'est la réception qui a le client en ligne, et
+ * un envoi automatique à chaque correction de faute de frappe serait pénible.
+ */
+export async function updateBooking(id: string, input: {
+  guestName: string
+  guestEmail?: string | null
+  guestPhone?: string | null
+  checkIn: string
+  checkOut: string
+  rooms: number
+  adults: number
+  children: number
+  roomId: string
+  status: 'pending' | 'confirmed' | 'cancelled'
+}) {
+  const checkIn = new Date(input.checkIn)
+  const checkOut = new Date(input.checkOut)
+  if (checkIn >= checkOut) {
+    throw new AppError('Check-out date must be after check-in date', 400)
+  }
+
+  const connection = await pool.getConnection()
+  let transactionStarted = false
+
+  try {
+    await connection.beginTransaction()
+    transactionStarted = true
+
+    const [existing] = await connection.execute<BookingRow[]>(
+      'SELECT id FROM bookings WHERE id = ? FOR UPDATE', [id],
+    )
+    if (existing.length === 0) throw new AppError('Réservation introuvable', 404)
+
+    const [rows] = await connection.execute<RoomRow[]>(
+      `SELECT ${ROOM_FIELDS} FROM rooms WHERE id = ? OR slug = ? OR translation_key = ? LIMIT 1 FOR UPDATE`,
+      [input.roomId, input.roomId, input.roomId],
+    )
+    const room = rows[0]
+    if (!room) throw new AppError('Chambre introuvable', 404)
+
+    const guests = input.adults + input.children
+    if (guests > room.max_guests * input.rooms) {
+      throw new AppError(
+        `Cette chambre accueille ${room.max_guests} personne(s) ; `
+        + `${input.rooms} chambre(s) ne suffisent pas pour ${guests} voyageur(s).`,
+        400,
+      )
+    }
+
+    // Une réservation annulée ne consomme rien : inutile de vérifier le stock.
+    if (input.status !== 'cancelled') {
+      const { free } = await countFreeUnits(
+        connection, room.id, room.total_units, checkIn, checkOut, id,
+      )
+      if (free < input.rooms) {
+        throw new AppError(`Only ${free} room(s) available for the selected dates`, 409)
+      }
+    }
+
+    await connection.execute(
+      `UPDATE bookings SET guest_name = ?, guest_email = ?, guest_phone = ?,
+       check_in = ?, check_out = ?, rooms_count = ?, adults = ?, children = ?,
+       room_id = ?, status = ? WHERE id = ?`,
+      [
+        input.guestName, input.guestEmail || null, input.guestPhone || null,
+        checkIn, checkOut, input.rooms, input.adults, input.children,
+        room.id, input.status, id,
+      ],
+    )
+
+    await connection.commit()
+    transactionStarted = false
+  } catch (error) {
+    if (transactionStarted) await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+
+  return { id }
 }

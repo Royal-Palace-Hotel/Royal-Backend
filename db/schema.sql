@@ -9,6 +9,13 @@ CREATE TABLE IF NOT EXISTS rooms (
   name_en VARCHAR(191) NULL,
   description TEXT NULL,
   description_en TEXT NULL,
+  -- Vue et literie, affichées dans le tableau comparatif du site. En base
+  -- plutôt que dans les fichiers de traduction : une chambre créée au
+  -- back-office n'aurait sinon aucun moyen de les renseigner.
+  view VARCHAR(191) NULL,
+  view_en VARCHAR(191) NULL,
+  bed_type VARCHAR(191) NULL,
+  bed_type_en VARCHAR(191) NULL,
   price DECIMAL(10, 2) NOT NULL,
   currency VARCHAR(8) NOT NULL DEFAULT 'EUR',
   size INT NOT NULL,

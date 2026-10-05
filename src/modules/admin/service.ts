@@ -11,12 +11,17 @@ interface AdminRow extends RowDataPacket {
 
 type RoomInput = {
   slug: string; translationKey?: string; name: string; nameEn: string; description: string; descriptionEn: string
+  view?: string | null; viewEn?: string | null; bedType?: string | null; bedTypeEn?: string | null
   price: number; currency: string; size: number; maxGuests: number; totalUnits: number; images: string[]; amenities: string[]
 }
 
 async function roomRows() {
   const [rooms] = await pool.execute<AdminRow[]>(
-    'SELECT id, slug, translation_key AS translationKey, name, name_en AS nameEn, description, description_en AS descriptionEn, price, currency, size, max_guests AS maxGuests, total_units AS totalUnits FROM rooms ORDER BY price, name',
+    `SELECT id, slug, translation_key AS translationKey, name, name_en AS nameEn,
+     description, description_en AS descriptionEn, view, view_en AS viewEn,
+     bed_type AS bedType, bed_type_en AS bedTypeEn, price, currency, size,
+     max_guests AS maxGuests, total_units AS totalUnits
+     FROM rooms ORDER BY price, name`,
   )
   if (!rooms.length) return []
   const ids = rooms.map((room) => room.id)
@@ -56,20 +61,24 @@ async function writeRoom(input: RoomInput, existingId?: string) {
     await connection.beginTransaction()
     const translationKey = input.translationKey || id
     const values = [input.slug, translationKey, input.name, input.nameEn, input.description,
-      input.descriptionEn, input.price, input.currency, input.size, input.maxGuests, input.totalUnits]
+      input.descriptionEn, input.view ?? null, input.viewEn ?? null,
+      input.bedType ?? null, input.bedTypeEn ?? null,
+      input.price, input.currency, input.size, input.maxGuests, input.totalUnits]
 
     if (existingId) {
       await connection.execute(
         `UPDATE rooms SET slug = ?, translation_key = ?, name = ?, name_en = ?, description = ?,
-         description_en = ?, price = ?, currency = ?, size = ?, max_guests = ?, total_units = ?
+         description_en = ?, view = ?, view_en = ?, bed_type = ?, bed_type_en = ?,
+         price = ?, currency = ?, size = ?, max_guests = ?, total_units = ?
          WHERE id = ?`,
         [...values, id],
       )
     } else {
       await connection.execute(
         `INSERT INTO rooms (slug, translation_key, name, name_en, description, description_en,
+         view, view_en, bed_type, bed_type_en,
          price, currency, size, max_guests, total_units, id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [...values, id],
       )
     }

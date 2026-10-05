@@ -29,6 +29,12 @@ export const roomSchema = z.object({
   nameEn: z.string().trim().min(1).max(191),
   description: z.string().trim().min(1),
   descriptionEn: z.string().trim().min(1),
+  // Facultatifs : le tableau comparatif retombe sur les traductions, puis sur
+  // un tiret, plutôt que d'afficher une clé brute.
+  view: optionalText,
+  viewEn: optionalText,
+  bedType: optionalText,
+  bedTypeEn: optionalText,
   price: z.coerce.number().nonnegative(),
   currency: z.string().trim().min(1).max(8),
   size: z.coerce.number().int().positive(),
@@ -165,6 +171,9 @@ export const roomBlockSchema = z.object({
   { message: 'La fin doit suivre le début', path: ['endDate'] },
 )
 
+/** Journée de la réception : un jour, au format AAAA-MM-JJ. */
+export const daySchema = z.object({ date: dayString('Le jour') })
+
 export const roomBlocksQuerySchema = z.object({
   from: dayString('Le début').optional(),
   to: dayString('La fin').optional(),
@@ -194,6 +203,32 @@ export const manualBookingSchema = z.object({
   adults: z.coerce.number().int().min(1, 'Au moins un adulte').max(40),
   children: z.coerce.number().int().min(0).max(40).default(0),
   status: z.enum(['pending', 'confirmed']).default('confirmed'),
+}).refine(
+  (data) => Date.parse(data.checkOut) > Date.parse(data.checkIn),
+  { message: 'Le départ doit suivre l’arrivée', path: ['checkOut'] },
+)
+
+/**
+ * Modification d'une réservation existante : mêmes champs que la saisie, mais
+ * le statut `cancelled` est accepté — on peut annuler depuis le formulaire.
+ */
+export const bookingEditSchema = z.object({
+  guestName: z.string().trim().min(2, 'Nom trop court').max(191),
+  guestEmail: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    z.string().trim().email('Adresse e-mail invalide').max(191).nullable().optional(),
+  ),
+  guestPhone: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    z.string().trim().max(64).nullable().optional(),
+  ),
+  checkIn: dayString('L’arrivée'),
+  checkOut: dayString('Le départ'),
+  roomId: z.string().trim().min(1, 'Choisissez une chambre').max(191),
+  rooms: z.coerce.number().int().min(1).max(10),
+  adults: z.coerce.number().int().min(1, 'Au moins un adulte').max(40),
+  children: z.coerce.number().int().min(0).max(40).default(0),
+  status: z.enum(['pending', 'confirmed', 'cancelled']),
 }).refine(
   (data) => Date.parse(data.checkOut) > Date.parse(data.checkIn),
   { message: 'Le départ doit suivre l’arrivée', path: ['checkOut'] },

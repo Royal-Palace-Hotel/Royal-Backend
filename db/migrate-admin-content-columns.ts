@@ -24,6 +24,10 @@ const schemaUpdates: Record<string, Array<readonly [string, string]>> = {
     ['name_en', 'VARCHAR(191) NULL'],
     ['description', 'TEXT NULL'],
     ['description_en', 'TEXT NULL'],
+    ['view', 'VARCHAR(191) NULL'],
+    ['view_en', 'VARCHAR(191) NULL'],
+    ['bed_type', 'VARCHAR(191) NULL'],
+    ['bed_type_en', 'VARCHAR(191) NULL'],
   ],
   event_rooms: [
     ['name', 'VARCHAR(191) NULL'],

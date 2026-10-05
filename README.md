@@ -285,7 +285,8 @@ Limite : 10 tentatives / 15 min par IP.
 | Tableau de bord | `GET /api/admin/stats` |
 | Images | `POST /api/admin/uploads` · `DELETE /api/admin/uploads/:fichier` |
 | Traduction | `GET /api/admin/translate` (disponibilité) · `POST /api/admin/translate` |
-| Disponibilité | `GET /api/admin/availability?from=&to=` |
+| Disponibilité | `GET /api/admin/availability?from=&to=` (option `ignoreBooking`) |
+| Journée | `GET /api/admin/day?date=` — arrivées, départs, clients sur place |
 | Périodes bloquées | `GET POST /api/admin/room-blocks` · `PUT DELETE /api/admin/room-blocks/:id` |
 | Chambres | `GET POST /api/admin/rooms` · `GET PUT DELETE /api/admin/rooms/:id` |
 | Sections de carte | `GET POST /api/admin/menu/sections` · `PUT DELETE /api/admin/menu/sections/:id` |
@@ -294,7 +295,7 @@ Limite : 10 tentatives / 15 min par IP.
 | Soins du spa | `GET POST /api/admin/spa` · `PUT DELETE /api/admin/spa/:id` |
 | Galerie photo | `GET POST /api/admin/gallery` (filtre `category`) · `PUT DELETE /api/admin/gallery/:id` |
 | Page Découvrir | `GET POST /api/admin/discover` (filtre `type`) · `PUT DELETE /api/admin/discover/:id` |
-| Réservations | `GET POST /api/admin/bookings` · `GET /api/admin/bookings/:id` · `PATCH /api/admin/bookings/:id` · `GET /api/admin/bookings/export` |
+| Réservations | `GET POST /api/admin/bookings` · `GET PUT /api/admin/bookings/:id` · `PATCH /api/admin/bookings/:id` · `GET /api/admin/bookings/export` |
 | Messages | `GET /api/admin/contact-messages` · `GET`/`PATCH`/`DELETE` `/:id` · `GET /api/admin/contact-messages/export` |
 | Abonnés | `GET /api/admin/subscribers` · `DELETE /api/admin/subscribers/:id` · `GET /api/admin/subscribers/export` |
 | Mon compte | `PUT /api/admin/account/password` |
@@ -326,11 +327,23 @@ les images livrées avec le site (`/images/...`) continuent d'être servies par 
 front.
 
 Formats acceptés : JPEG, PNG, WebP, AVIF, GIF ; 5 Mo par fichier. Le nom est
-entièrement régénéré et son extension déduite du type MIME, jamais du nom
-envoyé : un fichier « piege.php.jpg » est écrit en « <id>.jpg ». Les fichiers
-sont servis avec `X-Content-Type-Options: nosniff`, et avec
+entièrement régénéré, jamais dérivé du nom envoyé : un fichier
+« piege.php.jpg » est écrit en « <id>.webp ». Les fichiers sont servis avec
+`X-Content-Type-Options: nosniff`, et avec
 `Cross-Origin-Resource-Policy: cross-origin` pour ce seul dossier — sans quoi le
 réglage par défaut de `helmet` empêcherait le front de les afficher.
+
+**Les images sont retaillées à l'envoi** : 1600 px de large au maximum, puis
+réencodées en WebP (qualité 82). Une photo de téléphone de 4032 × 3024 ressort
+en 1600 × 1200, et une vraie photo de 662 ko tombe à 244 ko — mesuré. Sans cette
+étape, chaque ajout de contenu depuis le back-office alourdissait durablement le
+site, puisque l'original était servi tel quel à chaque visiteur.
+
+Le fichier transite en mémoire et n'est écrit qu'une fois traité : aucune image
+non optimisée n'atteint le disque. L'orientation EXIF est appliquée avant le
+réencodage, sans quoi une photo prise en portrait ressortirait couchée. Les GIF
+passent tels quels, pour ne pas perdre leur animation. La réponse renvoie
+`originalSize` à côté de `size`, pour pouvoir montrer le gain.
 
 Ils sont écrits dans `Royal-Backend/uploads/`, hors de Git. **En production,
 prévois un volume persistant pour ce dossier** : sur un hébergement au système
@@ -360,6 +373,28 @@ Les traductions déjà obtenues sont gardées en mémoire (500 textes). Le
 back-office traduit à chaque sortie de champ : sans ce cache, revenir sur une
 description pour corriger une virgule referait un appel facturé au quota mensuel
 pour un texte déjà traduit. Le cache est vidé au redémarrage de l'API.
+
+**Modifier une réservation.** `PUT /api/admin/bookings/:id` change les dates, la
+chambre, l'occupation et les coordonnées — `PATCH` ne touchait que le statut, si
+bien que décaler un séjour obligeait à annuler puis ressaisir. Le verrou est le
+même qu'à la création, avec une nuance : **la réservation s'ignore elle-même**
+dans le calcul de disponibilité. Sans cela, prolonger un séjour d'une nuit dans
+une catégorie complète échouerait, alors que l'unité qui bloque est déjà la
+sienne. `GET /api/admin/availability` accepte le même `ignoreBooking`, pour que
+l'écran du back-office annonce exactement ce que l'enregistrement acceptera.
+Aucun e-mail n'est envoyé : la réception a le client en ligne.
+
+**La journée.** `GET /api/admin/day?date=AAAA-MM-JJ` renvoie, nommément, qui
+arrive, qui part et qui dort sur place cette nuit-là. Le tableau de bord n'en
+donnait que les compteurs. Les réservations annulées en sont absentes, et le
+jour de son départ un client ne compte plus comme présent.
+
+**Vue et literie.** `rooms.view` et `rooms.bed_type` (avec leurs variantes
+`_en`) vivent en base, et non plus seulement dans les fichiers de traduction du
+front. Une chambre créée au back-office n'avait aucun moyen de les renseigner :
+le tableau comparatif du site affichait alors la clé brute, par exemple
+`roomsData.T23.view`, au visiteur. Le site lit désormais la base en premier,
+retombe sur la traduction pour les quatre chambres d'origine, puis sur un tiret.
 
 **Comptes et sécurité.** Un compte désactivé est refusé dès sa requête suivante
 (et non à l'expiration de son jeton) : chaque requête d'administration revérifie

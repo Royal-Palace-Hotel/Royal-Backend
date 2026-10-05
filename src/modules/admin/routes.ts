@@ -8,7 +8,7 @@ import {
   adminUserCreateSchema, adminUserUpdateSchema, auditQuerySchema, bookingStatusSchema,
   bookingsQuerySchema, changePasswordSchema, contactStatusSchema, discoverItemSchema,
   discoverQuerySchema, eventRoomSchema, galleryImageSchema, galleryQuerySchema, idSchema,
-  manualBookingSchema, menuItemSchema, menuSectionSchema, messagesQuerySchema, roomBlockSchema,
+  bookingEditSchema, daySchema, manualBookingSchema, menuItemSchema, menuSectionSchema, messagesQuerySchema, roomBlockSchema,
   roomBlocksQuerySchema, roomSchema, spaTreatmentSchema, subscribersQuerySchema, translateSchema,
 } from './validation'
 
@@ -74,6 +74,7 @@ router.delete('/discover/:id', id, controller.deleteDiscover)
 
 // Disponibilité : tableau jour par jour et périodes bloquées.
 router.get('/availability', validate(availabilityCalendarSchema, 'query'), controller.availability)
+router.get('/day', validate(daySchema, 'query'), controller.day)
 router.get('/room-blocks', validate(roomBlocksQuerySchema, 'query'), controller.listRoomBlocks)
 router.post('/room-blocks', validate(roomBlockSchema), controller.createRoomBlock)
 router.put('/room-blocks/:id', id, validate(roomBlockSchema), controller.updateRoomBlock)
@@ -84,6 +85,7 @@ router.get('/bookings', validate(bookingsQuerySchema, 'query'), controller.listB
 router.post('/bookings', validate(manualBookingSchema), controller.createManualBooking)
 router.get('/bookings/export', validate(bookingsQuerySchema, 'query'), controller.exportBookings)
 router.get('/bookings/:id', id, controller.getBooking)
+router.put('/bookings/:id', id, validate(bookingEditSchema), controller.editBooking)
 router.patch('/bookings/:id', id, validate(bookingStatusSchema), controller.updateBookingStatus)
 
 // Messages

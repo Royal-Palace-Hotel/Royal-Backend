@@ -102,6 +102,8 @@ const withinMaxWindow = (data: { from: string; to: string }) =>
 export const availabilityCalendarSchema = z.object({
   from: dateString('from'),
   to: dateString('to'),
+  /** Back-office : réservation à ne pas compter, car en cours de modification. */
+  ignoreBooking: z.string().trim().min(1).max(191).optional(),
 })
   .refine(data => Date.parse(data.to) > Date.parse(data.from), {
     message: 'The end of the window must come after its start',

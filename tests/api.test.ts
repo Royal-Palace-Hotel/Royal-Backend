@@ -1146,7 +1146,130 @@ async function testManualBooking() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 17. Traduction FR → EN                                              */
+/* 17. Modification d'une réservation et journée de la réception        */
+/* ------------------------------------------------------------------ */
+
+async function testBookingEditAndDay() {
+  section('Back-office — modifier une réservation, et la journée')
+
+  const list = await call('GET', '/admin/rooms', { auth: true })
+  const room = list.body?.data?.find((entry: any) => entry.totalUnits >= 1)
+  if (!check('une chambre est disponible pour le test', !!room, list)) return
+
+  const created = await call('POST', '/admin/bookings', {
+    auth: true,
+    body: {
+      guestName: `Edition ${RUN}`, guestPhone: '+261 34 00 000 00',
+      roomId: room.id, checkIn: day(400), checkOut: day(402),
+      rooms: 1, adults: 2, children: 0,
+    },
+  })
+  const id = created.body?.data?.id
+  if (!check('réservation de départ créée', created.status === 200 && !!id, created)) return
+
+  const base = {
+    guestName: `Edition ${RUN} corrigé`, guestPhone: '+261 34 00 000 00',
+    roomId: room.id, rooms: 1, adults: 2, children: 0, status: 'confirmed',
+  }
+
+  /*
+   * Le point délicat : une réservation ne doit pas se compter elle-même. Sans
+   * cela, corriger un nom sans toucher aux dates échouerait dès que la
+   * catégorie est complète — l'unité qui bloque étant la sienne.
+   */
+  const renamed = await call('PUT', `/admin/bookings/${id}`, {
+    auth: true, body: { ...base, checkIn: day(400), checkOut: day(402) },
+  })
+  check('PUT /admin/bookings/:id — corriger sans changer les dates',
+    renamed.status === 200, renamed)
+
+  const moved = await call('PUT', `/admin/bookings/${id}`, {
+    auth: true, body: { ...base, checkIn: day(401), checkOut: day(404) },
+  })
+  check('  décaler et prolonger le séjour', moved.status === 200, moved)
+
+  const overCapacity = await call('PUT', `/admin/bookings/${id}`, {
+    auth: true, body: { ...base, checkIn: day(401), checkOut: day(404), adults: 40 },
+  })
+  check('  un groupe trop grand pour la chambre est refusé en 400',
+    overCapacity.status === 400, overCapacity)
+
+  const ghost = await call('PUT', '/admin/bookings/identifiant-inexistant', {
+    auth: true, body: { ...base, checkIn: day(401), checkOut: day(404) },
+  })
+  check('  modifier une réservation inexistante renvoie 404', ghost.status === 404, ghost)
+
+  // Le calendrier doit pouvoir écarter la réservation en cours de modification,
+  // sinon le back-office afficherait « complet » à qui ne fait que la corriger.
+  const window = `from=${day(401)}&to=${day(402)}`
+  const withIt = await call('GET', `/admin/availability?${window}`, { auth: true })
+  const without = await call('GET', `/admin/availability?${window}&ignoreBooking=${id}`, { auth: true })
+  const freeIn = (res: any) => res.body?.data?.rooms
+    ?.find((entry: any) => entry.roomId === room.id)?.days?.[0]?.free
+  check('le calendrier sait ignorer une réservation précise',
+    freeIn(without) - freeIn(withIt) === 1, { avec: freeIn(withIt), sans: freeIn(without) })
+
+  const arrival = await call('GET', `/admin/day?date=${day(401)}`, { auth: true })
+  const named = (rows: any[]) => (rows ?? []).some((row: any) => row.id === id)
+  check('GET /admin/day nomme les arrivées du jour',
+    arrival.status === 200 && named(arrival.body?.data?.arrivals), arrival.body?.data?.arrivals)
+  check('  et les clients sur place', named(arrival.body?.data?.inHouse), undefined)
+
+  const departure = await call('GET', `/admin/day?date=${day(404)}`, { auth: true })
+  check('  le départ apparaît au jour du check-out',
+    named(departure.body?.data?.departures), departure.body?.data?.departures)
+  check('  ce jour-là, le client n’est plus compté sur place',
+    !named(departure.body?.data?.inHouse), departure.body?.data?.inHouse)
+
+  const badDate = await call('GET', '/admin/day?date=pas-une-date', { auth: true })
+  check('une date invalide est refusée en 400', badDate.status === 400, badDate)
+
+  // Annulée, elle ne consomme plus rien et sort de la journée.
+  const cancelled = await call('PUT', `/admin/bookings/${id}`, {
+    auth: true, body: { ...base, checkIn: day(401), checkOut: day(404), status: 'cancelled' },
+  })
+  check('  annuler depuis le formulaire de modification', cancelled.status === 200, cancelled)
+  const afterCancel = await call('GET', `/admin/day?date=${day(401)}`, { auth: true })
+  check('  une réservation annulée disparaît de la journée',
+    !named(afterCancel.body?.data?.arrivals), afterCancel.body?.data?.arrivals)
+}
+
+async function testRoomDetails() {
+  section('Chambres — vue et literie éditables')
+
+  const rooms = await call('GET', '/content/rooms')
+  const known = rooms.body?.data?.find((entry: any) => entry.slug === 'suite-royale')
+  check('les chambres exposent vue et literie',
+    rooms.status === 200 && known !== undefined &&
+    'view' in known && 'bedType' in known, known)
+  check('  le seed les a remplies pour les chambres d’origine',
+    typeof known?.view === 'string' && known.view.length > 0, known?.view)
+
+  const slug = `test-detail-${RUN}`
+  const added = await call('POST', '/admin/rooms', {
+    auth: true,
+    body: {
+      slug, name: 'Chambre détaillée', nameEn: 'Detailed room',
+      description: 'FR', descriptionEn: 'EN',
+      view: 'Vue sur les rizières', viewEn: 'Paddy field view',
+      bedType: 'Deux lits simples', bedTypeEn: 'Two single beds',
+      price: 70, currency: 'EUR', size: 20, maxGuests: 2, totalUnits: 1,
+      images: [], amenities: [],
+    },
+  })
+  const roomId = added.body?.data?.id
+  if (!check('créer une chambre avec vue et literie',
+    added.status === 200 && !!roomId, added)) return
+  created.rooms.push(roomId)
+
+  const published = await call('GET', '/content/rooms')
+  const mine = published.body?.data?.find((entry: any) => entry.slug === slug)
+  check('  elles ressortent telles quelles côté public',
+    mine?.view === 'Vue sur les rizières' && mine?.bedTypeEn === 'Two single beds', mine)
+}
+
+/* ------------------------------------------------------------------ */
+/* 18. Traduction FR → EN                                              */
 /* ------------------------------------------------------------------ */
 
 async function testTranslation() {
@@ -1190,7 +1313,7 @@ async function testTranslation() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 18. Spa, galerie, Découvrir                                         */
+/* 19. Spa, galerie, Découvrir                                         */
 /* ------------------------------------------------------------------ */
 
 async function testSpa() {
@@ -1337,7 +1460,7 @@ async function testDiscover() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 19. Pagination, recherche, tri                                      */
+/* 20. Pagination, recherche, tri                                      */
 /* ------------------------------------------------------------------ */
 
 async function testListControls() {
@@ -1385,7 +1508,7 @@ async function testListControls() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 20. Fiche détaillée                                                 */
+/* 21. Fiche détaillée                                                 */
 /* ------------------------------------------------------------------ */
 
 async function testDetails() {
@@ -1414,7 +1537,7 @@ async function testDetails() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 21. Abonnés et exports CSV                                          */
+/* 22. Abonnés et exports CSV                                          */
 /* ------------------------------------------------------------------ */
 
 async function testSubscribersAndExports() {
@@ -1478,7 +1601,7 @@ async function testSubscribersAndExports() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 22. Comptes, rôles et journal                                       */
+/* 23. Comptes, rôles et journal                                       */
 /* ------------------------------------------------------------------ */
 
 async function testUsersAndRoles() {
@@ -1632,7 +1755,7 @@ async function testUsersAndRoles() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 23. Envoi d'images                                                  */
+/* 24. Envoi d'images                                                  */
 /* ------------------------------------------------------------------ */
 
 /** PNG 1×1 valide, pour ne dépendre d'aucun fichier du dépôt. */
@@ -1713,8 +1836,15 @@ async function testUploads() {
   check('  lisible depuis une autre origine (CORP)',
     served.headers.get('cross-origin-resource-policy') === 'cross-origin',
     served.headers.get('cross-origin-resource-policy'))
+  // Les images sont réencodées en WebP à l'envoi : le contenu servi n'est plus
+  // l'octet pour octet de l'original, mais un fichier WebP valide. La signature
+  // d'un WebP est « RIFF » suivi, en position 8, de « WEBP ».
   const bytes = Buffer.from(await served.arrayBuffer())
-  check('  le contenu servi est identique à l’original', bytes.equals(SAMPLE_PNG), bytes.length)
+  check('  l’image est servie réencodée en WebP',
+    file.filename.endsWith('.webp') &&
+    bytes.subarray(0, 4).toString() === 'RIFF' &&
+    bytes.subarray(8, 12).toString() === 'WEBP',
+    { filename: file.filename, entete: bytes.subarray(0, 12).toString('hex') })
 
   const missing = await fetch(`${ROOT}/uploads/inexistant.png`)
   check('un fichier inconnu renvoie 404', missing.status === 404, missing.status)
@@ -1839,6 +1969,8 @@ async function main() {
     await testStats()
     await testAvailabilityCalendar()
     await testManualBooking()
+    await testBookingEditAndDay()
+    await testRoomDetails()
     await testTranslation()
     await testAdminRooms()
     await testAdminMenu()

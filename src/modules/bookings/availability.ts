@@ -36,10 +36,16 @@ const NIGHTS = `WITH RECURSIVE nights (d) AS (
   SELECT d + INTERVAL 1 DAY FROM nights WHERE d + INTERVAL 1 DAY < DATE(?)
 )`
 
-/** Unités occupées pour `room_alias`, la nuit `nights.d`. */
+/**
+ * Unités occupées pour `room_alias`, la nuit `nights.d`.
+ *
+ * Le `b.id <> ?` sert à la modification d'une réservation : elle doit pouvoir
+ * se déplacer sans buter sur le stock qu'elle occupe encore. Hors de ce cas,
+ * le paramètre vaut la chaîne vide, qu'aucun identifiant ne porte.
+ */
 const BOOKED = (alias: string) => `COALESCE((
   SELECT SUM(b.rooms_count) FROM bookings b
-  WHERE b.room_id = ${alias}.id AND b.status IN ('pending', 'confirmed')
+  WHERE b.room_id = ${alias}.id AND b.status IN ('pending', 'confirmed') AND b.id <> ?
     AND DATE(b.check_in) <= nights.d AND DATE(b.check_out) > nights.d
 ), 0)`
 
@@ -72,10 +78,13 @@ async function nightlyRows(
   executor: Executor,
   from: Date | string,
   to: Date | string,
-  filters: { roomId?: string; minGuests?: number } = {},
+  filters: { roomId?: string; minGuests?: number; ignoreBookingId?: string } = {},
 ): Promise<NightRow[]> {
   const conditions: string[] = []
-  const values: Array<Date | string | number> = [from, to]
+  // `ignoreBookingId` : une réservation en cours de modification ne doit pas se
+  // compter elle-même, sinon déplacer un séjour d'un jour se heurterait au
+  // stock qu'elle occupe déjà.
+  const values: Array<Date | string | number> = [from, to, filters.ignoreBookingId ?? '']
 
   if (filters.roomId) {
     conditions.push('(r.id = ? OR r.slug = ? OR r.translation_key = ?)')
@@ -120,8 +129,9 @@ export interface FreeUnits {
  */
 export async function countFreeUnits(
   executor: Executor, roomId: string, totalUnits: number, checkIn: Date, checkOut: Date,
+  ignoreBookingId?: string,
 ): Promise<FreeUnits> {
-  const rows = await nightlyRows(executor, checkIn, checkOut, { roomId })
+  const rows = await nightlyRows(executor, checkIn, checkOut, { roomId, ignoreBookingId })
   if (rows.length === 0) return { free: totalUnits, booked: 0, blocked: 0 }
 
   return {
@@ -183,8 +193,10 @@ export interface RoomAvailability {
  * Calendrier jour par jour, pour chaque catégorie de chambre.
  * `from` est inclusive, `to` exclusive.
  */
-export async function getAvailabilityCalendar(from: Date, to: Date): Promise<RoomAvailability[]> {
-  const rows = await nightlyRows(pool, from, to)
+export async function getAvailabilityCalendar(
+  from: Date, to: Date, ignoreBookingId?: string,
+): Promise<RoomAvailability[]> {
+  const rows = await nightlyRows(pool, from, to, { ignoreBookingId })
 
   const byRoom = new Map<string, RoomAvailability>()
   for (const row of rows) {

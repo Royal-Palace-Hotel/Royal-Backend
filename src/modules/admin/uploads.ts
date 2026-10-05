@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
-import { unlink } from 'node:fs/promises'
-import { extname, join, resolve } from 'node:path'
+import { unlink, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { Request, Response, NextFunction } from 'express'
 import multer from 'multer'
+import sharp from 'sharp'
 import { AppError } from '../../middleware/errorHandler'
 
 /** Dossier de stockage, à la racine du backend et hors de `src/`. */
@@ -31,13 +32,20 @@ const ALLOWED: Record<string, string> = {
 export const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 Mo
 const MAX_FILES = 12
 
-const storage = multer.diskStorage({
-  destination: (req, file, done) => done(null, UPLOAD_DIR),
-  filename: (req, file, done) => {
-    const extension = ALLOWED[file.mimetype] ?? extname(file.originalname).toLowerCase()
-    done(null, `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}${extension}`)
-  },
-})
+/**
+ * Largeur maximale conservée. Au-delà, on paie des pixels qu'aucun écran
+ * n'affiche : une photo prise au téléphone fait couramment 4000 px de large,
+ * alors que la plus grande zone du site en occupe 1600.
+ */
+const MAX_WIDTH = 1600
+const WEBP_QUALITY = 82
+
+/**
+ * Les fichiers transitent en mémoire plutôt que par le disque : ils sont
+ * retaillés avant d'être écrits, donc aucune image d'origine, potentiellement
+ * de plusieurs mégaoctets, n'atterrit dans `uploads/`.
+ */
+const storage = multer.memoryStorage()
 
 export const uploadMiddleware = multer({
   storage,
@@ -54,25 +62,73 @@ export const uploadMiddleware = multer({
   },
 }).array('files', MAX_FILES)
 
+const newName = (extension: string) =>
+  `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}${extension}`
+
+/**
+ * Retaille et réencode une image avant de l'écrire.
+ *
+ * Sans cette étape, une photo de 4 Mo prise au téléphone par la réception
+ * serait servie telle quelle, à chaque visiteur, indéfiniment : le poids du
+ * site se dégraderait à chaque ajout de contenu. Le WebP divise encore par deux
+ * à qualité équivalente, et il est lu par tous les navigateurs courants.
+ *
+ * `rotate()` sans argument applique l'orientation EXIF : une photo prise en
+ * portrait resterait sinon couchée une fois les métadonnées perdues au
+ * réencodage.
+ */
+async function store(file: Express.Multer.File) {
+  // Un GIF animé perdrait son animation au réencodage : il passe tel quel.
+  if (file.mimetype === 'image/gif') {
+    const filename = newName('.gif')
+    await writeFile(join(UPLOAD_DIR, filename), file.buffer)
+    return { filename, size: file.buffer.length, mimeType: 'image/gif' }
+  }
+
+  let output: Buffer
+  try {
+    output = await sharp(file.buffer)
+      .rotate()
+      .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+      .webp({ quality: WEBP_QUALITY })
+      .toBuffer()
+  } catch {
+    throw new AppError(`Image illisible ou endommagée : ${file.originalname}`, 400)
+  }
+
+  const filename = newName('.webp')
+  await writeFile(join(UPLOAD_DIR, filename), output)
+  return { filename, size: output.length, mimeType: 'image/webp' }
+}
+
 /**
  * Les chemins renvoyés sont relatifs (`/uploads/<fichier>`) : la base reste
  * valable si le domaine de l'API change. Le front les résout contre l'origine
  * de l'API.
  */
-export function handleUpload(req: Request, res: Response, next: NextFunction) {
-  const files = (req.files as Express.Multer.File[] | undefined) ?? []
-  if (files.length === 0) {
-    return next(new AppError('Aucun fichier reçu', 400))
+export async function handleUpload(req: Request, res: Response, next: NextFunction) {
+  try {
+    const files = (req.files as Express.Multer.File[] | undefined) ?? []
+    if (files.length === 0) {
+      throw new AppError('Aucun fichier reçu', 400)
+    }
+
+    const stored = await Promise.all(files.map(async (file) => {
+      const { filename, size, mimeType } = await store(file)
+      return {
+        url: `/uploads/${filename}`,
+        filename,
+        originalName: file.originalname,
+        size,
+        originalSize: file.size,
+        mimeType,
+      }
+    }))
+
+    res.status(201).json({ data: stored })
+  } catch (error) {
+    next(error)
   }
-  res.status(201).json({
-    data: files.map((file) => ({
-      url: `/uploads/${file.filename}`,
-      filename: file.filename,
-      originalName: file.originalname,
-      size: file.size,
-      mimeType: file.mimetype,
-    })),
-  })
 }
 
 /** Traduit les erreurs de multer en réponses lisibles. */
