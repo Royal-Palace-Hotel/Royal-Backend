@@ -3,12 +3,20 @@
   "version": "1.0.0",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "nodemon --exec tsx src/server.ts",
+    "dev": "nodemon --quiet --watch src --ext ts --exec tsx src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+<<<<<<< HEAD
     "db:init": "tsx db/init.ts",
     "seed": "tsx db/seed.ts",
     "db:seed": "npm run seed",
+=======
+    "typecheck": "tsc --noEmit",
+    "test:api": "tsx tests/api.test.ts",
+    "db:init": "tsx db/run-sql.ts db/schema.sql",
+    "db:seed": "tsx db/run-sql.ts db/seed.sql",
+    "db:setup": "npm run db:init && npm run db:migrate:admin-content && npm run db:seed",
+>>>>>>> 94231c016bba1d428e09faf829daddaeeae4e86c
     "db:migrate:admin-content": "tsx db/migrate-admin-content-columns.ts",
     "db:reset": "npm run db:init && tsx db/run-sql.ts db/reset.sql && tsx db/run-sql.ts db/schema.sql && npm run seed",
     "create-admin": "tsx db/create-admin.ts"
@@ -26,8 +34,13 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
+<<<<<<< HEAD
     "mysql2": "^3.14.0",
     "resend": "^6.26.0",
+=======
+    "mysql2": "^3.24.4",
+    "nodemailer": "^10.0.13",
+>>>>>>> 94231c016bba1d428e09faf829daddaeeae4e86c
     "tsx": "^4.23.13",
     "zod": "^4.5.4"
   },
@@ -38,6 +51,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.3.0",
     "@types/node": "^20.19.43",
+    "@types/nodemailer": "^8.0.2",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
     "typescript": "^7.0.2"

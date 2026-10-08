@@ -51,13 +51,87 @@ ON DUPLICATE KEY UPDATE
   name = VALUES(name), name_en = VALUES(name_en), description = VALUES(description),
   description_en = VALUES(description_en), price = VALUES(price), sort_order = VALUES(sort_order), section_id = VALUES(section_id);
 
-INSERT INTO spa_treatments (id, `key`, duration_key, price, sort_order) VALUES
-  ('t1', 'treatment1', 'treatment1Duration', 45000, 0),
-  ('t2', 'treatment2', 'treatment2Duration', 60000, 1),
-  ('t3', 'treatment3', 'treatment3Duration', 40000, 2),
-  ('t4', 'treatment4', 'treatment4Duration', 42000, 3),
-  ('t5', 'treatment5', 'treatment5Duration', 95000, 4)
-ON DUPLICATE KEY UPDATE `key` = VALUES(`key`), duration_key = VALUES(duration_key), price = VALUES(price), sort_order = VALUES(sort_order);
+-- Libellés repris de src/i18n/locales/{fr,en}.ts du front.
+INSERT INTO spa_treatments (id, `key`, duration_key, name, name_en, duration, duration_en, price, sort_order) VALUES
+  ('t1', 'treatment1', 'treatment1Duration', 'Massage relaxant aux huiles essentielles', 'Relaxing massage with essential oils', '60 min', '60 min', 45000, 0),
+  ('t2', 'treatment2', 'treatment2Duration', 'Massage aux pierres chaudes', 'Hot stone massage', '75 min', '75 min', 60000, 1),
+  ('t3', 'treatment3', 'treatment3Duration', 'Soin du visage hydratant', 'Hydrating facial treatment', '45 min', '45 min', 40000, 2),
+  ('t4', 'treatment4', 'treatment4Duration', 'Gommage corps complet', 'Full body scrub', '50 min', '50 min', 42000, 3),
+  ('t5', 'treatment5', 'treatment5Duration', 'Rituel duo (couple)', 'Duo ritual (couples)', '90 min', '90 min', 95000, 4)
+-- COALESCE : on remplit les colonnes encore vides (base créée avant leur ajout)
+-- sans jamais écraser un libellé saisi au back-office.
+ON DUPLICATE KEY UPDATE
+  `key` = VALUES(`key`), duration_key = VALUES(duration_key),
+  name = COALESCE(name, VALUES(name)), name_en = COALESCE(name_en, VALUES(name_en)),
+  duration = COALESCE(duration, VALUES(duration)), duration_en = COALESCE(duration_en, VALUES(duration_en)),
+  price = VALUES(price), sort_order = VALUES(sort_order);
+
+-- Images de la galerie : reprise du registre de src/data/gallery.ts du front.
+INSERT INTO gallery_images (id, src, alt, alt_en, category, sort_order) VALUES
+  ('hero-1', '/images/hero/hero-building.jpg', 'Façade du Royal Palace Antsirabe au crépuscule', 'Royal Palace Antsirabe facade at dusk', 'hero', 0),
+  ('room-1', '/images/rooms/room-1.jpg', 'Chambre supérieure avec lit confortable', 'Superior room with a comfortable bed', 'rooms', 0),
+  ('room-2', '/images/rooms/room-2.jpg', 'Chambre deluxe élégante', 'Elegant deluxe room', 'rooms', 1),
+  ('room-3', '/images/rooms/room-3.jpg', 'Suite royale avec décoration raffinée', 'Royal suite with refined decor', 'rooms', 2),
+  ('room-4', '/images/rooms/room-4.jpg', 'Chambre classique lumineuse', 'Bright classic room', 'rooms', 3),
+  ('restaurant-1', '/images/restaurant/restaurant-1.jpg', 'Salle du restaurant Royal Palace', 'Royal Palace dining room', 'restaurant', 0),
+  ('restaurant-2', '/images/restaurant/restaurant-2.jpg', 'Table dressée dans une ambiance élégante', 'Table set in an elegant setting', 'restaurant', 1),
+  ('restaurant-3', '/images/restaurant/food-1.jpg', 'Plat gastronomique raffiné', 'Refined gourmet dish', 'restaurant', 2),
+  ('restaurant-4', '/images/restaurant/breakfast-1.jpg', 'Buffet petit-déjeuner gourmand', 'Hearty breakfast buffet', 'restaurant', 3),
+  ('pool-1', '/images/pool/pool-1.jpg', 'Piscine entourée de palmiers', 'Pool surrounded by palm trees', 'pool', 0),
+  ('pool-2', '/images/pool/pool-2.jpg', 'Piscine et jardin tropical', 'Pool and tropical garden', 'pool', 1),
+  ('pool-3', '/images/pool/pool-3.jpg', 'Espace détente au bord de la piscine', 'Poolside lounge area', 'pool', 2),
+  ('spa-1', '/images/spa/spa-1.jpg', 'Cabine de soin du spa', 'Spa treatment room', 'spa', 0),
+  ('spa-2', '/images/spa/spa-2.jpg', 'Ambiance zen du spa', 'Zen spa atmosphere', 'spa', 1),
+  ('spa-3', '/images/spa/spa-3.jpg', 'Salle de massage apaisante', 'Soothing massage room', 'spa', 2),
+  ('events-1', '/images/events/events-1.jpg', 'Salle de réunion équipée', 'Equipped meeting room', 'events', 0),
+  ('events-2', '/images/events/events-2.jpg', 'Salle de conférence professionnelle', 'Professional conference room', 'events', 1),
+  ('events-3', '/images/events/events-3.jpg', 'Espace de réception pour événements', 'Reception space for events', 'events', 2),
+  ('discover-1', '/images/discover/antsirabe-1.jpg', 'Rue d''Antsirabe avec architecture coloniale', 'Antsirabe street with colonial architecture', 'discover', 0),
+  ('discover-2', '/images/discover/antsirabe-2.jpg', 'Paysage des hauts-plateaux malgaches', 'Malagasy highlands landscape', 'discover', 1),
+  ('discover-3', '/images/discover/antsirabe-3.jpg', 'Vue d''Antsirabe', 'View of Antsirabe', 'discover', 2),
+  ('discover-4', '/images/discover/garden-1.jpg', 'Jardin tropical luxuriant', 'Lush tropical garden', 'discover', 3),
+  ('gallery-1', '/images/gallery/lobby-1.jpg', 'Hall d''accueil élégant du Royal Palace', 'Elegant Royal Palace lobby', 'gallery', 0)
+-- Seul le chemin du fichier est réaligné ; les légendes et le classement
+-- restent ceux du back-office une fois la ligne créée.
+ON DUPLICATE KEY UPDATE src = VALUES(src);
+
+-- Page « Découvrir » : activités illustrées puis attractions à proximité.
+-- Les textes reprennent ceux de src/i18n/locales/{fr,en}.ts du front.
+INSERT INTO discover_items (id, type, `key`, title, title_en, text, text_en, icon, image, sort_order) VALUES
+  ('a1', 'activity', 'activity1', 'Tour en pousse-pousse', 'Rickshaw Tour',
+   'Découvrez la ville à bord d''un pousse-pousse coloré, moyen de transport emblématique d''Antsirabe.',
+   'Discover the city aboard a colourful pousse-pousse, Antsirabe''s iconic mode of transport.',
+   'CarTaxiFront', '/images/discover/antsirabe-1.jpg', 0),
+  ('a2', 'activity', 'activity2', 'Lac Andraikiba', 'Lake Andraikiba',
+   'Un lac de cratère paisible, idéal pour une promenade ou un pique-nique en pleine nature.',
+   'A peaceful crater lake, ideal for a walk or picnic in nature.',
+   'Waves', '/images/discover/antsirabe-2.jpg', 1),
+  ('a3', 'activity', 'activity3', 'Ateliers d''artisanat', 'Craft Workshops',
+   'Visitez les ateliers de corne de zébu, de pierres précieuses et de miniatures automobiles.',
+   'Visit workshops for zebu horn carving, gemstones and miniature car models.',
+   'Hammer', '/images/discover/antsirabe-3.jpg', 2),
+  ('a4', 'activity', 'activity4', 'Sources thermales', 'Thermal Springs',
+   'Profitez des vertus des eaux thermales, réputées depuis l''époque coloniale.',
+   'Enjoy the benefits of thermal waters, renowned since colonial times.',
+   'Droplets', '/images/discover/garden-1.jpg', 3),
+  ('at1', 'attraction', 'attraction1',
+   'Parc national de Ranomafana (à la journée)', 'Ranomafana National Park (day trip)',
+   NULL, NULL, NULL, NULL, 0),
+  ('at2', 'attraction', 'attraction2',
+   'Route des Baobabs (excursion)', 'Avenue of the Baobabs (excursion)',
+   NULL, NULL, NULL, NULL, 1),
+  ('at3', 'attraction', 'attraction3',
+   'Marché artisanal local', 'Local craft market',
+   NULL, NULL, NULL, NULL, 2),
+  ('at4', 'attraction', 'attraction4',
+   'Cathédrale d''Antsirabe', 'Antsirabe Cathedral',
+   NULL, NULL, NULL, NULL, 3)
+-- Idem : on complète ce qui est vide, on n'écrase pas ce qui a été saisi.
+ON DUPLICATE KEY UPDATE
+  type = VALUES(type),
+  title = COALESCE(title, VALUES(title)), title_en = COALESCE(title_en, VALUES(title_en)),
+  text = COALESCE(text, VALUES(text)), text_en = COALESCE(text_en, VALUES(text_en)),
+  icon = COALESCE(icon, VALUES(icon)), image = COALESCE(image, VALUES(image));
 
 INSERT INTO event_rooms (id, `key`, name, name_en, description, description_en, image, capacity, schedule, price, currency, sort_order) VALUES
   ('room1', 'room1', NULL, NULL, NULL, NULL, '/images/events/events-1.jpg', NULL, NULL, NULL, NULL, 0),
