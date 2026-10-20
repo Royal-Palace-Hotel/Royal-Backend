@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authMiddleware, ensureActiveUser, requireAdmin } from '../../middleware/authMiddleware'
 import { validate } from '../../middleware/validate'
+import { handleImageUpload } from './upload'
 import * as controller from './controller'
 import { deleteUpload, handleUpload, uploadErrorHandler, uploadMiddleware } from './uploads'
 import { availabilityCalendarSchema } from '../bookings/validation'
@@ -15,6 +16,13 @@ import {
 const router = Router()
 const id = validate(idSchema, 'params')
 
+<<<<<<< HEAD
+router.post('/uploads', handleImageUpload, (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Choose an image file to upload.' })
+  res.status(201).json({ data: { path: `/uploads/${req.file.filename}` } })
+})
+
+=======
 router.use(authMiddleware)
 router.use(ensureActiveUser)
 
@@ -32,6 +40,7 @@ router.post('/uploads', uploadMiddleware, uploadErrorHandler, handleUpload)
 router.delete('/uploads/:filename', deleteUpload)
 
 // Chambres
+>>>>>>> 94231c016bba1d428e09faf829daddaeeae4e86c
 router.get('/rooms', controller.listRooms)
 router.post('/rooms', validate(roomSchema), controller.createRoom)
 router.get('/rooms/:id', id, controller.getRoom)

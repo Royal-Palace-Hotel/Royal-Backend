@@ -1,7 +1,13 @@
 import { createPool, type PoolOptions } from 'mysql2/promise'
 import { DATABASE_URL } from './env'
 
+<<<<<<< HEAD
+const databaseUrl = process.env.DATABASE_URL || 'mysql://royal:royal@127.0.0.1:3306/royal_palace'
+
+const url = new URL(databaseUrl)
+=======
 const url = new URL(DATABASE_URL)
+>>>>>>> 94231c016bba1d428e09faf829daddaeeae4e86c
 
 if (url.protocol !== 'mysql:') {
   throw new Error('DATABASE_URL must use the mysql:// protocol')

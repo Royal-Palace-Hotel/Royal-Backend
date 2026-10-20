@@ -12,10 +12,38 @@ formulaires de contact, newsletter et back-office d'administration.
 
 ---
 
+<<<<<<< HEAD
+## Local development setup
+
+Prerequisites: Node.js 18+ and Docker with its engine running. `db:init` starts the Compose MySQL service automatically when no local MySQL server is reachable. It also works with a running MySQL server configured through `DATABASE_URL`. No `.env` copy or manual database setup is needed for the defaults.
+
+Run these commands from the repository root:
+=======
 ## Démarrage rapide
+>>>>>>> 94231c016bba1d428e09faf829daddaeeae4e86c
 
 ```bash
+cd Royal-Backend
 npm install
+<<<<<<< HEAD
+npm run db:init
+npm run seed
+npm run dev
+```
+
+The API is available at `http://localhost:4000`. The local seed provides this shared development account:
+
+```text
+Email:    admin@royalpalace.test
+Password: DevAdmin123!
+```
+
+The seed is idempotent and creates the same room, restaurant, spa, event-room, and admin records on every fresh database. Bookings, contact messages, and newsletter subscriptions stay empty because they are transactional/user-submitted data, not default configuration. Do not run the local seed in production.
+
+`npm run db:reset` is an optional destructive reset of the local schema and data; it recreates the schema and runs the seed. `npm run create-admin` remains an optional interactive utility for provisioning a separate admin on a database that has no admin users; it is not part of local setup.
+
+For databases created before editable room and event-room content was added, run `npm run db:migrate:admin-content` once. Fresh databases already include those columns in `db/schema.sql`; this migration is not part of local setup.
+=======
 cp .env.example .env     # puis ajuste DATABASE_URL
 npm run db:setup         # crée le schéma + insère le contenu de départ
 npm run create-admin -- admin@royalpalaceantsirabe.com tonMotDePasse admin
@@ -196,6 +224,7 @@ chambre.
 Le calendrier public ne dit **que** le reste à vendre : ni qui a réservé, ni
 pourquoi une unité est bloquée. Le détail (`booked`, `blocked`) reste au
 back-office.
+>>>>>>> 94231c016bba1d428e09faf829daddaeeae4e86c
 
 **Réservation** — `roomId` est facultatif : s'il est absent, la chambre la moins
 chère pouvant accueillir le groupe et disponible sur la période est attribuée.
@@ -233,11 +262,24 @@ dépasser le nombre d'unités disponibles. En cas de dépassement, l'API répond
 
 ### Comment la disponibilité est calculée
 
+<<<<<<< HEAD
+### Auth API (Admin)
+- `POST /api/auth/login` - Admin login
+  ```json
+  {
+    "email": "admin@royalpalace.test",
+    "password": "DevAdmin123!"
+  }
+  ```
+- `POST /api/auth/register` - Register new admin user
+- `GET /api/auth/me` - Get current user (requires JWT token)
+=======
 Deux choses occupent une unité : une **réservation active** (`pending` ou
 `confirmed` — une annulation rend ses nuits) et un **blocage** (`room_blocks` :
 travaux, fermeture, réservation reçue hors du site). Les bornes de fin sont
 toujours **exclusives** : un séjour du 12 au 15 occupe les nuits du 12, 13 et 14,
 et laisse le 15 libre pour l'arrivée suivante.
+>>>>>>> 94231c016bba1d428e09faf829daddaeeae4e86c
 
 Tout se calcule **nuit par nuit**, jamais en cumulant les réservations d'une
 période — c'est la seule façon d'obtenir la bonne réponse. Dans une catégorie de
@@ -390,12 +432,20 @@ pour que la session qui vient de faire le changement ne soit pas coupée.
 ```
 Royal-Backend/
 ├── db/
+<<<<<<< HEAD
+│   ├── schema.sql           # MySQL schema
+│   ├── seed.sql             # Idempotent content seed
+│   ├── seed.ts              # Content and local admin seed
+│   ├── init.ts              # Starts/initializes local MySQL
+│   └── run-sql.ts           # Windows-friendly SQL runner
+=======
 │   ├── schema.sql                      # Schéma MySQL
 │   ├── seed.sql                        # Contenu de départ (idempotent)
 │   ├── reset.sql                       # Suppression des tables
 │   ├── run-sql.ts                      # Exécuteur de fichiers .sql
 │   ├── create-admin.ts                 # Création / réinitialisation d'un admin
 │   └── migrate-admin-content-columns.ts
+>>>>>>> 94231c016bba1d428e09faf829daddaeeae4e86c
 ├── src/
 │   ├── server.ts                       # Point d'entrée unique
 │   ├── config/
@@ -451,9 +501,20 @@ commande est sûre à relancer. Les nouvelles *tables* sont créées par
 Pour une base antérieure au tableau de disponibilité, la mise à jour tient en
 deux commandes, sans perte de données :
 
+<<<<<<< HEAD
+Emails are sent via Resend when `RESEND_API_KEY` is configured. The local default leaves it blank, so email notifications are skipped; ask the team lead for a key if email delivery is needed.
+
+## 🔒 Authentication
+
+Admin endpoints use JWT authentication. Include the token in the Authorization header:
+
+```
+Authorization: Bearer <your-jwt-token>
+=======
 ```bash
 npm run db:init                    # crée room_blocks
 npm run db:migrate:admin-content   # ajoute bookings.source, rend guest_email facultative
+>>>>>>> 94231c016bba1d428e09faf829daddaeeae4e86c
 ```
 
 `bookings.guest_email` devient **nullable** : une réservation saisie au

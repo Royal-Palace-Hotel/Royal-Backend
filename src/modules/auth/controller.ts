@@ -8,7 +8,11 @@ import { AppError } from '../../middleware/errorHandler'
 import { recordAudit } from '../admin/audit'
 import { issueToken } from './token'
 
+<<<<<<< HEAD
+export const JWT_SECRET = process.env.JWT_SECRET || 'LOCAL_DEV_ONLY_CHANGE_BEFORE_PRODUCTION'
+=======
 const ADMIN_FIELDS = 'id, email, password, name, role, is_active, token_version, created_at, updated_at'
+>>>>>>> 94231c016bba1d428e09faf829daddaeeae4e86c
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
