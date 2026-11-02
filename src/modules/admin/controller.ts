@@ -8,7 +8,7 @@ import { csvFilename, toCsv } from './csv'
 import { translateToEnglish, translationEnabled } from '../../utils/translate'
 import * as blocks from './blocks'
 import { getAvailabilityCalendar } from '../bookings/availability'
-import { createBooking } from '../bookings/service'
+import { createBooking, updateBooking } from '../bookings/service'
 
 /** Enveloppe un handler : la valeur renvoyée part dans `{ data }`. */
 function handle(operation: (req: Request) => Promise<unknown>): RequestHandler {
@@ -76,13 +76,17 @@ export const stats = handle(() => getDashboardStats())
  * un second aller-retour.
  */
 export const availability = handle(async (req) => {
-  const { from, to } = req.query as unknown as { from: string; to: string }
+  const { from, to, ignoreBooking } = req.query as unknown as
+    { from: string; to: string; ignoreBooking?: string }
   const [calendar, periods] = await Promise.all([
-    getAvailabilityCalendar(new Date(from), new Date(to)),
+    getAvailabilityCalendar(new Date(from), new Date(to), ignoreBooking),
     blocks.listRoomBlocks({ from, to }),
   ])
   return { from, to, rooms: calendar, blocks: periods }
 })
+
+/** Ce qui se passe aujourd'hui, nommément : arrivées, départs, clients sur place. */
+export const day = handle((req) => blocks.getDay(String(req.query.date)))
 
 export const listRoomBlocks = handle((req) =>
   blocks.listRoomBlocks(req.query as { from?: string; to?: string }))
@@ -112,6 +116,15 @@ export const createManualBooking = audited('create', 'booking',
     notify: false,
   }),
   (req) => `${req.body.guestName} (saisie manuelle)`)
+
+/**
+ * Modification d'une réservation : dates, chambre, occupation, coordonnées.
+ * Jusqu'ici seul le statut était modifiable, donc décaler un séjour obligeait à
+ * annuler puis ressaisir.
+ */
+export const editBooking = audited('update', 'booking',
+  (req) => updateBooking(String(req.params.id), req.body),
+  (req) => `${req.body.guestName} · ${req.body.checkIn} → ${req.body.checkOut}`)
 
 /* ------------------------------------------------------------------ */
 /* Traduction FR → EN                                                  */

@@ -18,6 +18,10 @@ export interface RoomContent {
   nameEn: string | null
   description: string | null
   descriptionEn: string | null
+  view: string | null
+  viewEn: string | null
+  bedType: string | null
+  bedTypeEn: string | null
   price: number
   currency: string
   images: string[]
@@ -57,6 +61,10 @@ export function mapRoom(
     nameEn: room.name_en,
     description: room.description,
     descriptionEn: room.description_en,
+    view: room.view,
+    viewEn: room.view_en,
+    bedType: room.bed_type,
+    bedTypeEn: room.bed_type_en,
     price: room.price,
     currency: room.currency,
     images: images.map(row => row.image),

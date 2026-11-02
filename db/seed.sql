@@ -1,23 +1,33 @@
 USE royal_palace;
 
-INSERT INTO rooms (id, slug, translation_key, name, name_en, description, description_en, price, currency, size, max_guests, total_units) VALUES
-  ('classic', 'chambre-classique', 'classic', NULL, NULL, NULL, NULL, 65, 'EUR', 22, 2, 10),
-  ('superior', 'chambre-superieure', 'superior', NULL, NULL, NULL, NULL, 95, 'EUR', 28, 3, 8),
-  ('deluxe', 'chambre-deluxe', 'deluxe', NULL, NULL, NULL, NULL, 130, 'EUR', 34, 3, 6),
-  ('suite', 'suite-royale', 'suite', NULL, NULL, NULL, NULL, 220, 'EUR', 55, 4, 4)
+-- `view` et `bed_type` reprennent ce qui vivait dans les fichiers de traduction,
+-- pour que les quatre chambres d'origine soient éditables au back-office comme
+-- les autres. `COALESCE` ne les pose que si elles sont encore vides : une
+-- valeur saisie au back-office n'est jamais réécrite par un nouveau seed.
+INSERT INTO rooms (id, slug, translation_key, name, name_en, description, description_en,
+  view, view_en, bed_type, bed_type_en, price, currency, size, max_guests, total_units) VALUES
+  ('classic', 'chambre-classique', 'classic', NULL, NULL, NULL, NULL,
+   'Vue jardin', 'Garden view', 'Lit double ou lits jumeaux', 'Double or twin beds', 65, 'EUR', 22, 2, 10),
+  ('superior', 'chambre-superieure', 'superior', NULL, NULL, NULL, NULL,
+   'Vue jardin ou piscine', 'Garden or pool view', 'Lit king size', 'King size bed', 95, 'EUR', 28, 3, 8),
+  ('deluxe', 'chambre-deluxe', 'deluxe', NULL, NULL, NULL, NULL,
+   'Vue piscine', 'Pool view', 'Lit king size', 'King size bed', 130, 'EUR', 34, 3, 6),
+  ('suite', 'suite-royale', 'suite', NULL, NULL, NULL, NULL,
+   'Vue panoramique', 'Panoramic view', 'Lit king size + canapé-lit', 'King size bed + sofa bed', 220, 'EUR', 55, 4, 4)
 ON DUPLICATE KEY UPDATE
   slug = VALUES(slug), translation_key = VALUES(translation_key), price = VALUES(price),
-  currency = VALUES(currency), size = VALUES(size), max_guests = VALUES(max_guests), total_units = VALUES(total_units);
+  currency = VALUES(currency), size = VALUES(size), max_guests = VALUES(max_guests),
+  total_units = VALUES(total_units),
+  view = COALESCE(view, VALUES(view)), view_en = COALESCE(view_en, VALUES(view_en)),
+  bed_type = COALESCE(bed_type, VALUES(bed_type)), bed_type_en = COALESCE(bed_type_en, VALUES(bed_type_en));
+
+DELETE FROM room_images WHERE room_id IN ('classic', 'superior', 'deluxe', 'suite');
 
 INSERT INTO room_images (room_id, image, sort_order) VALUES
-  ('classic', '/images/rooms/room-4.jpg', 0),
-  ('classic', '/images/rooms/room-1.jpg', 1),
-  ('superior', '/images/rooms/room-1.jpg', 0),
-  ('superior', '/images/rooms/room-2.jpg', 1),
-  ('deluxe', '/images/rooms/room-2.jpg', 0),
-  ('deluxe', '/images/rooms/room-3.jpg', 1),
-  ('suite', '/images/rooms/room-3.jpg', 0),
-  ('suite', '/images/rooms/room-4.jpg', 1)
+  ('classic', '/images/Photo-chambre.jpg', 0),
+  ('superior', '/images/Photo-Bloc-1.webp', 0),
+  ('deluxe', '/images/Image-GYX72HV.jpg', 0),
+  ('suite', '/images/Photo-Gallerie-5-1200.jpg', 0)
 ON DUPLICATE KEY UPDATE image = VALUES(image);
 
 INSERT INTO room_amenities (room_id, amenity, sort_order) VALUES
@@ -69,23 +79,21 @@ ON DUPLICATE KEY UPDATE
 -- Images de la galerie : reprise du registre de src/data/gallery.ts du front.
 INSERT INTO gallery_images (id, src, alt, alt_en, category, sort_order) VALUES
   ('hero-1', '/images/hero/hero-building.jpg', 'Façade du Royal Palace Antsirabe au crépuscule', 'Royal Palace Antsirabe facade at dusk', 'hero', 0),
-  ('room-1', '/images/rooms/room-1.jpg', 'Chambre supérieure avec lit confortable', 'Superior room with a comfortable bed', 'rooms', 0),
-  ('room-2', '/images/rooms/room-2.jpg', 'Chambre deluxe élégante', 'Elegant deluxe room', 'rooms', 1),
-  ('room-3', '/images/rooms/room-3.jpg', 'Suite royale avec décoration raffinée', 'Royal suite with refined decor', 'rooms', 2),
-  ('room-4', '/images/rooms/room-4.jpg', 'Chambre classique lumineuse', 'Bright classic room', 'rooms', 3),
-  ('restaurant-1', '/images/restaurant/restaurant-1.jpg', 'Salle du restaurant Royal Palace', 'Royal Palace dining room', 'restaurant', 0),
-  ('restaurant-2', '/images/restaurant/restaurant-2.jpg', 'Table dressée dans une ambiance élégante', 'Table set in an elegant setting', 'restaurant', 1),
-  ('restaurant-3', '/images/restaurant/food-1.jpg', 'Plat gastronomique raffiné', 'Refined gourmet dish', 'restaurant', 2),
-  ('restaurant-4', '/images/restaurant/breakfast-1.jpg', 'Buffet petit-déjeuner gourmand', 'Hearty breakfast buffet', 'restaurant', 3),
-  ('pool-1', '/images/pool/pool-1.jpg', 'Piscine entourée de palmiers', 'Pool surrounded by palm trees', 'pool', 0),
-  ('pool-2', '/images/pool/pool-2.jpg', 'Piscine et jardin tropical', 'Pool and tropical garden', 'pool', 1),
-  ('pool-3', '/images/pool/pool-3.jpg', 'Espace détente au bord de la piscine', 'Poolside lounge area', 'pool', 2),
+  ('room-1', '/images/Photo-chambre.jpg', 'Chambre supérieure avec lit confortable', 'Superior room with a comfortable bed', 'rooms', 0),
+  ('room-2', '/images/Photo-Bloc-1.webp', 'Chambre deluxe élégante', 'Elegant deluxe room', 'rooms', 1),
+  ('room-3', '/images/Image-GYX72HV.jpg', 'Suite royale avec décoration raffinée', 'Royal suite with refined decor', 'rooms', 2),
+  ('room-4', '/images/Photo-Gallerie-5-1200.jpg', 'Chambre classique lumineuse', 'Bright classic room', 'rooms', 3),
+  ('restaurant-1', '/images/restaurant/terrace-real.jpg', 'Terrasse du restaurant Royal Palace', 'Royal Palace restaurant terrace', 'restaurant', 0),
+  ('restaurant-2', '/images/restaurant/dish-real.jpg', 'Plat raffiné du restaurant Royal Palace', 'Refined Royal Palace dish', 'restaurant', 1),
+  ('restaurant-3', '/images/restaurant/cocktails-real.jpg', 'Cocktails et boissons fraîches', 'Cocktails and fresh drinks', 'restaurant', 2),
+  ('restaurant-4', '/images/Photo-nourriture-1.webp', 'Création culinaire du restaurant', 'Restaurant culinary creation', 'restaurant', 3),
+  ('restaurant-5', '/images/Photo-restaurant-1.webp', 'Ambiance du restaurant Royal Palace', 'Royal Palace restaurant atmosphere', 'restaurant', 4),
   ('spa-1', '/images/spa/spa-1.jpg', 'Cabine de soin du spa', 'Spa treatment room', 'spa', 0),
   ('spa-2', '/images/spa/spa-2.jpg', 'Ambiance zen du spa', 'Zen spa atmosphere', 'spa', 1),
   ('spa-3', '/images/spa/spa-3.jpg', 'Salle de massage apaisante', 'Soothing massage room', 'spa', 2),
-  ('events-1', '/images/events/events-1.jpg', 'Salle de réunion équipée', 'Equipped meeting room', 'events', 0),
-  ('events-2', '/images/events/events-2.jpg', 'Salle de conférence professionnelle', 'Professional conference room', 'events', 1),
-  ('events-3', '/images/events/events-3.jpg', 'Espace de réception pour événements', 'Reception space for events', 'events', 2),
+  ('events-1', '/images/Photo-Evenements-1200.jpg', 'Salle de réunion et événements', 'Meeting and events room', 'events', 0),
+  ('events-2', '/images/Photo-Gallerie-1-1200.jpg', 'Salle de conférence professionnelle', 'Professional conference room', 'events', 1),
+  ('events-3', '/images/Photo-Gallerie-2-1200.jpg', 'Espace de réception pour événements', 'Reception space for events', 'events', 2),
   ('discover-1', '/images/discover/antsirabe-1.jpg', 'Rue d''Antsirabe avec architecture coloniale', 'Antsirabe street with colonial architecture', 'discover', 0),
   ('discover-2', '/images/discover/antsirabe-2.jpg', 'Paysage des hauts-plateaux malgaches', 'Malagasy highlands landscape', 'discover', 1),
   ('discover-3', '/images/discover/antsirabe-3.jpg', 'Vue d''Antsirabe', 'View of Antsirabe', 'discover', 2),
@@ -136,5 +144,5 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO event_rooms (id, `key`, name, name_en, description, description_en, image, capacity, schedule, price, currency, sort_order) VALUES
   ('room1', 'room1', NULL, NULL, NULL, NULL, '/images/events/events-1.jpg', NULL, NULL, NULL, NULL, 0),
   ('room2', 'room2', NULL, NULL, NULL, NULL, '/images/events/events-2.jpg', NULL, NULL, NULL, NULL, 1),
-  ('room3', 'room3', NULL, NULL, NULL, NULL, '/images/events/events-3.jpg', NULL, NULL, NULL, NULL, 2)
+  ('room3', 'room3', NULL, NULL, NULL, NULL, '/images/events/events-3.jpg', NULL, NULL, NULL, NULL, 2);
 ON DUPLICATE KEY UPDATE `key` = VALUES(`key`), image = VALUES(image), sort_order = VALUES(sort_order);

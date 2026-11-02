@@ -15,7 +15,9 @@ import { getRestaurantMenu } from '../restaurant/service'
 
 export async function getRooms() {
   const [rooms] = await pool.execute<RoomRow[]>(
-    'SELECT id, slug, translation_key, name, name_en, description, description_en, price, currency, size, max_guests, total_units FROM rooms ORDER BY price ASC',
+    `SELECT id, slug, translation_key, name, name_en, description, description_en,
+     view, view_en, bed_type, bed_type_en, price, currency, size, max_guests, total_units
+     FROM rooms ORDER BY price ASC`,
   )
   if (rooms.length === 0) return []
 

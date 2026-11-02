@@ -100,6 +100,65 @@ export async function saveRoomBlock(input: BlockInput, id?: string) {
   return rows[0]
 }
 
+/* ------------------------------------------------------------------ */
+/* Journée de la réception                                             */
+/* ------------------------------------------------------------------ */
+
+interface DayBookingRow extends RowDataPacket {
+  id: string
+  guestName: string
+  guestEmail: string | null
+  guestPhone: string | null
+  roomName: string | null
+  rooms: number
+  adults: number
+  children: number
+  nights: number
+  checkIn: string
+  checkOut: string
+  status: string
+  source: string
+}
+
+const DAY_FIELDS = `b.id, b.guest_name AS guestName, b.guest_email AS guestEmail,
+  b.guest_phone AS guestPhone, COALESCE(r.name, r.slug) AS roomName,
+  b.rooms_count AS rooms, b.adults, b.children,
+  DATEDIFF(b.check_out, b.check_in) AS nights,
+  DATE_FORMAT(b.check_in, '%Y-%m-%d') AS checkIn,
+  DATE_FORMAT(b.check_out, '%Y-%m-%d') AS checkOut,
+  b.status, b.source
+  FROM bookings b LEFT JOIN rooms r ON r.id = b.room_id`
+
+/** Une réservation annulée n'arrive pas, ne part pas et n'occupe rien. */
+const ACTIVE = "b.status IN ('pending', 'confirmed')"
+
+/**
+ * Ce qui se passe un jour donné, nommément.
+ *
+ * Le tableau de bord n'affichait que des compteurs : « arrivées : 2 », sans
+ * dire qui. Il fallait aller dans la liste des réservations et trier à la main,
+ * exactement au moment où la réception a le moins de temps.
+ *
+ * Les comparaisons passent par `DATE(...)` : le jour d'une arrivée ne doit
+ * dépendre d'aucune heure résiduelle dans la donnée.
+ */
+export async function getDay(date: string) {
+  const query = (clause: string, values: string[]) => pool.execute<DayBookingRow[]>(
+    `SELECT ${DAY_FIELDS} WHERE ${ACTIVE} AND ${clause} ORDER BY b.guest_name`,
+    values,
+  ).then(([rows]) => rows)
+
+  const [arrivals, departures, inHouse] = await Promise.all([
+    query('DATE(b.check_in) = ?', [date]),
+    query('DATE(b.check_out) = ?', [date]),
+    // Sur place la nuit du jour choisi : arrivé au plus tard ce jour-là, et
+    // reparti strictement après.
+    query('DATE(b.check_in) <= ? AND DATE(b.check_out) > ?', [date, date]),
+  ])
+
+  return { date, arrivals, departures, inHouse }
+}
+
 export async function deleteRoomBlock(id: string) {
   const [result] = await pool.execute<ResultSetHeader>('DELETE FROM room_blocks WHERE id = ?', [id])
   if (!result.affectedRows) throw new AppError('Période bloquée introuvable', 404)
