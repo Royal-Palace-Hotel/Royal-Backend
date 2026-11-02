@@ -29,7 +29,7 @@ const ALLOWED: Record<string, string> = {
   'image/gif': '.gif',
 }
 
-export const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 Mo
+export const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 Mo
 const MAX_FILES = 12
 
 /**
