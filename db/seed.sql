@@ -88,9 +88,6 @@ INSERT INTO gallery_images (id, src, alt, alt_en, category, sort_order) VALUES
   ('restaurant-3', '/images/restaurant/cocktails-real.jpg', 'Cocktails et boissons fraîches', 'Cocktails and fresh drinks', 'restaurant', 2),
   ('restaurant-4', '/images/Photo-nourriture-1.webp', 'Création culinaire du restaurant', 'Restaurant culinary creation', 'restaurant', 3),
   ('restaurant-5', '/images/Photo-restaurant-1.webp', 'Ambiance du restaurant Royal Palace', 'Royal Palace restaurant atmosphere', 'restaurant', 4),
-  ('pool-1', '/images/pool/pool-1.jpg', 'Piscine entourée de palmiers', 'Pool surrounded by palm trees', 'pool', 0),
-  ('pool-2', '/images/pool/pool-2.jpg', 'Piscine et jardin tropical', 'Pool and tropical garden', 'pool', 1),
-  ('pool-3', '/images/pool/pool-3.jpg', 'Espace détente au bord de la piscine', 'Poolside lounge area', 'pool', 2),
   ('spa-1', '/images/spa/spa-1.jpg', 'Cabine de soin du spa', 'Spa treatment room', 'spa', 0),
   ('spa-2', '/images/spa/spa-2.jpg', 'Ambiance zen du spa', 'Zen spa atmosphere', 'spa', 1),
   ('spa-3', '/images/spa/spa-3.jpg', 'Salle de massage apaisante', 'Soothing massage room', 'spa', 2),
@@ -145,7 +142,7 @@ ON DUPLICATE KEY UPDATE
   icon = COALESCE(icon, VALUES(icon)), image = COALESCE(image, VALUES(image));
 
 INSERT INTO event_rooms (id, `key`, name, name_en, description, description_en, image, capacity, schedule, price, currency, sort_order) VALUES
-  ('room1', 'room1', NULL, NULL, NULL, NULL, '/images/Photo-Evenements-1200.jpg', NULL, NULL, NULL, NULL, 0),
-  ('room2', 'room2', NULL, NULL, NULL, NULL, '/images/Photo-Gallerie-1-1200.jpg', NULL, NULL, NULL, NULL, 1),
-  ('room3', 'room3', NULL, NULL, NULL, NULL, '/images/Photo-Gallerie-2-1200.jpg', NULL, NULL, NULL, NULL, 2)
+  ('room1', 'room1', NULL, NULL, NULL, NULL, '/images/events/events-1.jpg', NULL, NULL, NULL, NULL, 0),
+  ('room2', 'room2', NULL, NULL, NULL, NULL, '/images/events/events-2.jpg', NULL, NULL, NULL, NULL, 1),
+  ('room3', 'room3', NULL, NULL, NULL, NULL, '/images/events/events-3.jpg', NULL, NULL, NULL, NULL, 2);
 ON DUPLICATE KEY UPDATE `key` = VALUES(`key`), image = VALUES(image), sort_order = VALUES(sort_order);
