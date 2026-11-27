@@ -33,28 +33,10 @@ export const ADMIN_INVITE_CODE = process.env.ADMIN_INVITE_CODE || ''
 export const RATE_LIMIT_DISABLED =
   !IS_PRODUCTION && /^(1|true|yes)$/i.test(process.env.DISABLE_RATE_LIMIT || '')
 
-/**
- * E-mails via le SMTP de Gmail — optionnel : sans ces deux valeurs, les envois
- * sont ignorés sans faire échouer la requête.
- *
- * `GMAIL_APP_PASSWORD` est un « mot de passe d'application » à 16 caractères,
- * pas le mot de passe du compte. Google l'affiche par groupes de quatre
- * (« abcd efgh ijkl mnop ») : les espaces sont retirés ici, pour qu'un
- * copier-coller tel quel fonctionne.
- */
-export const GMAIL_USER = process.env.GMAIL_USER || ''
-export const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '')
-
-/**
- * Gmail n'autorise l'envoi que depuis l'adresse authentifiée (ou un alias
- * vérifié dans « Envoyer des e-mails en tant que »). L'expéditeur est donc
- * déduit de `GMAIL_USER` : une valeur distincte serait réécrite ou refusée par
- * Gmail, ce qui donnerait une panne difficile à diagnostiquer.
- */
-export const FROM_EMAIL = GMAIL_USER
-export const FROM_NAME = process.env.FROM_NAME || 'Royal Palace Antsirabe'
-
-export const HOTEL_EMAIL = process.env.HOTEL_EMAIL || 'royalpalace.resa@moov.mg'
+/** Resend email delivery is optional; without all three values, emails are skipped. */
+export const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim()
+export const MAIL_FROM = (process.env.MAIL_FROM || '').trim()
+export const MAIL_TO = (process.env.MAIL_TO || '').trim()
 
 /**
  * Traduction française → anglaise des champs du back-office (DeepL).
